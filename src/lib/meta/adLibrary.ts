@@ -57,7 +57,18 @@ export async function fetchAdsForCompetitor(
     const reqParams = { ...params }
     if (after) reqParams.after = after
 
-    const response = await client.get('/ads_archive', { params: reqParams })
+    let response
+    try {
+      response = await client.get('/ads_archive', { params: reqParams })
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: unknown; status?: number } }
+      if (axiosErr?.response?.data) {
+        const meta = axiosErr.response.data as { error?: { message?: string; code?: number; type?: string } }
+        const e = meta?.error
+        throw new Error(`Meta API error ${axiosErr.response.status}: ${e?.message ?? JSON.stringify(meta)} (code ${e?.code}, type ${e?.type})`)
+      }
+      throw err
+    }
     const data = response.data
 
     if (!data.data || data.data.length === 0) break
