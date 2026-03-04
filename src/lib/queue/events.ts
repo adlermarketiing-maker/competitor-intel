@@ -1,7 +1,3 @@
-// Use BullMQ's bundled ioredis to avoid version conflicts
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const IORedis = require('bullmq/node_modules/ioredis') as typeof import('ioredis').default
-
 function parseRedisUrl(url: string) {
   const parsed = new URL(url)
   return {
@@ -15,16 +11,24 @@ function parseRedisUrl(url: string) {
   }
 }
 
-let publisherClient: InstanceType<typeof IORedis> | null = null
+function getIORedis() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('ioredis') as typeof import('ioredis').default
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let publisherClient: any = null
 
 function getPublisher() {
   if (!publisherClient) {
+    const IORedis = getIORedis()
     publisherClient = new IORedis(parseRedisUrl(process.env.REDIS_URL!))
   }
   return publisherClient
 }
 
 export function getSubscriberClient() {
+  const IORedis = getIORedis()
   return new IORedis(parseRedisUrl(process.env.REDIS_URL!))
 }
 
