@@ -124,9 +124,11 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
   const country = options.countries[0] ?? 'ALL'
   const maxAds = options.maxAds ?? 100
 
+  // Use ALL countries for broader results; keyword_unordered finds ads by content/page name
+  const searchCountry = options.pageIds?.length ? country : 'ALL'
   const url = options.pageIds?.length
-    ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&view_all_page_id=${options.pageIds[0]}`
-    : `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&q=${encodeURIComponent(options.searchTerms ?? '')}&search_type=page`
+    ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${searchCountry}&view_all_page_id=${options.pageIds[0]}`
+    : `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${searchCountry}&q=${encodeURIComponent(options.searchTerms ?? '')}&search_type=keyword_unordered`
 
   console.log(`[Scraper] Starting scrape: ${url}`)
 
@@ -175,6 +177,10 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
       if (ads.length >= maxAds) return
       try {
         const text = await response.text()
+        // Log first 2 GraphQL responses to understand the format
+        if (graphqlResponses <= 2) {
+          console.log(`[Scraper] GraphQL response #${graphqlResponses} preview (200 chars): ${text.substring(0, 200)}`)
+        }
         const before = ads.length
         parseGraphQLText(text, ads, seenIds)
         if (ads.length > before) {
