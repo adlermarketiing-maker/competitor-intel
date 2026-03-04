@@ -1,10 +1,9 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios'
 
-const BASE_URL = `https://graph.facebook.com/${process.env.META_API_VERSION ?? 'v20.0'}`
-
 export function createMetaClient(accessToken: string): AxiosInstance {
+  const baseURL = `https://graph.facebook.com/${process.env.META_API_VERSION ?? 'v20.0'}`
   const client = axios.create({
-    baseURL: BASE_URL,
+    baseURL,
     params: { access_token: accessToken },
   })
 
