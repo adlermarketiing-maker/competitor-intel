@@ -74,8 +74,8 @@ function mapToMetaAdRaw(node: Record<string, unknown>): MetaAdRaw | null {
 
   return {
     id,
-    page_id: (node.page_id ?? node.page?.id) as string | undefined,
-    page_name: (node.page_name ?? node.page?.name) as string | undefined,
+    page_id: (node.page_id ?? (node.page as Record<string, unknown> | undefined)?.id) as string | undefined,
+    page_name: (node.page_name ?? (node.page as Record<string, unknown> | undefined)?.name) as string | undefined,
     ad_creative_bodies: bodies.length > 0 ? bodies : undefined,
     ad_creative_link_titles: snapshot.title ? [snapshot.title as string] : undefined,
     ad_creative_link_descriptions: snapshot.link_description
