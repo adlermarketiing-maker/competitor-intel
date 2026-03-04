@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     ],
   },
   // Exclude puppeteer from server bundle — it runs only in the worker process
-  serverExternalPackages: ['puppeteer', 'puppeteer-core', 'bullmq', 'ioredis'],
+  serverExternalPackages: ['puppeteer', 'puppeteer-core', 'puppeteer-extra', 'puppeteer-extra-plugin-stealth', 'bullmq', 'ioredis'],
 }
 
 export default nextConfig

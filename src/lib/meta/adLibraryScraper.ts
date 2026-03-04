@@ -1,5 +1,8 @@
-import puppeteer from 'puppeteer'
+import puppeteerExtra from 'puppeteer-extra'
+import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import type { MetaAdRaw } from '@/types/scrape'
+
+puppeteerExtra.use(StealthPlugin())
 
 interface FetchAdsOptions {
   searchTerms?: string
@@ -123,11 +126,11 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
 
   const url = options.pageIds?.length
     ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&view_all_page_id=${options.pageIds[0]}`
-    : `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&q=${encodeURIComponent(options.searchTerms ?? '')}&search_type=keyword_unordered`
+    : `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&q=${encodeURIComponent(options.searchTerms ?? '')}&search_type=page`
 
   console.log(`[Scraper] Starting scrape: ${url}`)
 
-  const browser = await puppeteer.launch({
+  const browser = await puppeteerExtra.launch({
     headless: true,
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     args: [
