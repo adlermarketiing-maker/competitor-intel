@@ -28,7 +28,6 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
   if (!competitor) throw new Error('Competitor not found')
 
   const token = await getMetaToken()
-  if (!token) throw new Error('No Meta token configured. Please add your token in Settings.')
 
   const settings = await getSettings()
   const effectiveCountries = countries.length > 0 ? countries : (settings?.countries ?? ['ES', 'MX'])
