@@ -28,33 +28,49 @@ export async function GET(
   const stream = new ReadableStream({
     start(controller) {
       const channel = jobChannel(jobId!)
+      let closed = false
+
+      function safeEnqueue(data: string) {
+        if (closed) return
+        try {
+          controller.enqueue(encoder.encode(data))
+        } catch {
+          closed = true
+        }
+      }
+
+      function safeClose() {
+        if (closed) return
+        closed = true
+        try { controller.close() } catch {}
+      }
 
       subscriber.subscribe(channel, (err) => {
         if (err) {
-          controller.close()
+          safeClose()
           return
         }
       })
 
       subscriber.on('message', (_chan: string, message: string) => {
-        controller.enqueue(encoder.encode(`data: ${message}\n\n`))
+        safeEnqueue(`data: ${message}\n\n`)
       })
 
       // Send initial ping
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'connected', message: 'Connected to job stream' })}\n\n`))
+      safeEnqueue(`data: ${JSON.stringify({ type: 'connected', message: 'Connected to job stream' })}\n\n`)
 
       // Auto-close after 10 minutes
       const timeout = setTimeout(async () => {
         await subscriber.unsubscribe(channel)
         subscriber.disconnect()
-        controller.close()
+        safeClose()
       }, 10 * 60 * 1000)
 
       req.signal.addEventListener('abort', async () => {
         clearTimeout(timeout)
         await subscriber.unsubscribe(channel)
         subscriber.disconnect()
-        controller.close()
+        safeClose()
       })
     },
   })

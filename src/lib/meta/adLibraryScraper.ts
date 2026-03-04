@@ -125,6 +125,8 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
     ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&view_all_page_id=${options.pageIds[0]}`
     : `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&q=${encodeURIComponent(options.searchTerms ?? '')}&search_type=keyword_unordered`
 
+  console.log(`[Scraper] Starting scrape: ${url}`)
+
   const browser = await puppeteer.launch({
     headless: true,
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
@@ -136,38 +138,114 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
       '--no-first-run',
       '--no-zygote',
       '--single-process',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--lang=es-ES,es',
     ],
   })
 
   const seenIds = new Set<string>()
   const ads: MetaAdRaw[] = []
+  let graphqlResponses = 0
 
   try {
     const page = await browser.newPage()
+
+    // Bypass bot detection
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).chrome = { runtime: {} }
+    })
+
     await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
     )
     await page.setViewport({ width: 1280, height: 900 })
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8' })
 
     // Intercept Facebook's internal GraphQL responses (where the real ads data lives)
     page.on('response', async (response) => {
-      if (!response.url().includes('api/graphql')) return
+      const responseUrl = response.url()
+      if (!responseUrl.includes('api/graphql')) return
+      graphqlResponses++
       if (ads.length >= maxAds) return
       try {
         const text = await response.text()
         const before = ads.length
         parseGraphQLText(text, ads, seenIds)
-        if (ads.length > before) options.onProgress?.(ads.length)
+        if (ads.length > before) {
+          console.log(`[Scraper] Found ${ads.length} ads so far (from GraphQL)`)
+          options.onProgress?.(ads.length)
+        }
       } catch {}
     })
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 })
-    await new Promise((r) => setTimeout(r, 4000))
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
+
+    console.log(`[Scraper] Page loaded, final URL: ${page.url()}`)
+
+    // Handle cookie consent / GDPR dialogs
+    await new Promise((r) => setTimeout(r, 3000))
+    const cookieSelectors = [
+      '[data-testid="cookie-policy-manage-dialog-accept-button"]',
+      'button[title="Allow all cookies"]',
+      'button[title="Permitir todas las cookies"]',
+      '[data-cookiebanner="accept_button"]',
+      'button[data-testid="accept-cookie-banner-button"]',
+      '[aria-label="Allow all cookies"]',
+    ]
+    for (const sel of cookieSelectors) {
+      try {
+        const btn = await page.$(sel)
+        if (btn) {
+          console.log(`[Scraper] Accepting cookies via: ${sel}`)
+          await btn.click()
+          await new Promise((r) => setTimeout(r, 2000))
+          break
+        }
+      } catch {}
+    }
+
+    // Log page title to understand what we landed on
+    const title = await page.title()
+    console.log(`[Scraper] Page title: "${title}"`)
+
+    await new Promise((r) => setTimeout(r, 3000))
 
     // Scroll to trigger lazy loading of more ads
     for (let i = 0; i < 8 && ads.length < maxAds; i++) {
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
       await new Promise((r) => setTimeout(r, 2500))
+      if (i === 0) {
+        console.log(`[Scraper] After first scroll: ${ads.length} ads, ${graphqlResponses} GraphQL responses intercepted`)
+      }
+    }
+
+    console.log(`[Scraper] Scroll done: ${ads.length} ads from GraphQL, ${graphqlResponses} total GraphQL responses`)
+
+    // Fallback: extract ad IDs directly from rendered DOM links
+    if (ads.length === 0) {
+      console.log('[Scraper] No ads from GraphQL — trying DOM fallback')
+      const domAdIds = await page.evaluate(() => {
+        const ids: string[] = []
+        document.querySelectorAll('a[href*="ads/archive/render_ad"]').forEach((el) => {
+          const href = (el as HTMLAnchorElement).href
+          const m = href.match(/[?&]id=(\d+)/)
+          if (m && !ids.includes(m[1])) ids.push(m[1])
+        })
+        return ids
+      })
+      console.log(`[Scraper] DOM fallback found ${domAdIds.length} ad IDs`)
+      for (const adId of domAdIds) {
+        if (!seenIds.has(adId)) {
+          seenIds.add(adId)
+          ads.push({
+            id: adId,
+            ad_snapshot_url: `https://www.facebook.com/ads/archive/render_ad/?id=${adId}`,
+          })
+        }
+      }
     }
 
     await page.close()
@@ -175,5 +253,6 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
     await browser.close()
   }
 
+  console.log(`[Scraper] Done: ${ads.length} ads returned`)
   return ads.slice(0, maxAds)
 }
