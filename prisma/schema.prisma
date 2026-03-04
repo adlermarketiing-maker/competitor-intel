@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Singleton row to store the Meta access token
+model Settings {
+  id          String    @id @default("singleton")
+  metaToken   String?
+  tokenExpiry DateTime?
+  countries   String[]  @default(["ES", "MX", "AR", "CO", "US"])
+  updatedAt   DateTime  @updatedAt
+}
+
+// A competitor being monitored
+model Competitor {
+  id            String    @id @default(cuid())
+  name          String
+  fbPageName    String?
+  fbPageId      String?
+  websiteUrl    String?
+  searchTerm    String?
+  facebookUrl   String?
+  instagramUrl  String?
+  adLibraryUrl  String?
+  lastScrapedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  ads        Ad[]
+  scrapeJobs ScrapeJob[]
+
+  @@index([fbPageId])
+  @@index([name])
+}
+
+// An ad from the Meta Ad Library
+model Ad {
+  id           String     @id @default(cuid())
+  competitorId String
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  metaAdId      String   @unique
+  adCopyBodies  String[]
+  headline      String?
+  description   String?
+  caption       String?
+  ctaType       String?
+  landingUrl    String?
+  adSnapshotUrl String?
+  imageUrls     String[]
+  videoUrls     String[]
+  platforms     String[]
+  pageId        String?
+  pageName      String?
+
+  isActive    Boolean  @default(true)
+  startDate   DateTime?
+  stopDate    DateTime?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  landingPages LandingPage[]
+
+  @@index([competitorId])
+  @@index([isActive])
+  @@index([startDate])
+}
+
+// A scraped landing page
+model LandingPage {
+  id          String @id @default(cuid())
+  adId        String?
+  ad          Ad?    @relation(fields: [adId], references: [id], onDelete: SetNull)
+
+  url            String   @unique
+  originalUrl    String
+  title          String?
+  h1Texts        String[]
+  h2Texts        String[]
+  ctaTexts       String[]
+  prices         String[]
+  offerName      String?
+  bodyText       String?
+  screenshotPath String?
+  outboundLinks  String[]
+  httpStatus     Int?
+  scrapedAt      DateTime @default(now())
+  scrapeError    String?
+  createdAt      DateTime @default(now())
+
+  funnelSteps FunnelStep[] @relation("FunnelStepPage")
+
+  @@index([adId])
+}
+
+// One step in a detected funnel chain
+model FunnelStep {
+  id           String      @id @default(cuid())
+  competitorId String
+  funnelId     String
+  stepOrder    Int
+  url          String
+  pageType     String?
+  landingPageId String?
+  landingPage  LandingPage? @relation("FunnelStepPage", fields: [landingPageId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+
+  @@index([competitorId])
+  @@index([funnelId])
+  @@unique([funnelId, stepOrder])
+}
+
+// Keyword-based competitor discovery search
+model KeywordSearch {
+  id        String   @id @default(cuid())
+  keywords  String
+  niche     String?
+  countries String[]
+  createdAt DateTime @default(now())
+
+  discoveredCompetitors DiscoveredCompetitor[]
+  platformCourses       PlatformCourse[]
+}
+
+// A competitor discovered via keyword search (not yet added manually)
+model DiscoveredCompetitor {
+  id               String        @id @default(cuid())
+  searchId         String
+  search           KeywordSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  pageName         String
+  pageId           String?
+  adCount          Int           @default(0)
+  sampleCopy       String?
+  sampleLandingUrl String?
+  competitorId     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([searchId])
+  @@index([pageId])
+}
+
+// A course/product found on external platforms (Udemy, Hotmart, Skool, Pylon)
+model PlatformCourse {
+  id          String         @id @default(cuid())
+  searchId    String?
+  search      KeywordSearch? @relation(fields: [searchId], references: [id], onDelete: SetNull)
+  platform    String
+  title       String
+  url         String         @unique
+  authorName  String?
+  price       String?
+  rating      Float?
+  reviewCount Int?
+  description String?
+  scrapedAt   DateTime       @default(now())
+
+  comments PlatformComment[]
+
+  @@index([platform])
+  @@index([searchId])
+}
+
+// A comment/review extracted from a platform course
+model PlatformComment {
+  id        String         @id @default(cuid())
+  courseId  String
+  course    PlatformCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  author    String?
+  text      String
+  rating    Int?
+  date      String?
+  createdAt DateTime       @default(now())
+
+  @@index([courseId])
+}
+
+// Background job tracking
+model ScrapeJob {
+  id           String     @id @default(cuid())
+  competitorId String
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  jobType        String
+  status         String   @default("PENDING")
+  totalTasks     Int      @default(0)
+  completedTasks Int      @default(0)
+  failedTasks    Int      @default(0)
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([competitorId])
+  @@index([status])
+}

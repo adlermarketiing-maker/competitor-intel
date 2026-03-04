@@ -1,7 +1,15 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.fbcdn.net' },
+      { protocol: 'https', hostname: '**.facebook.com' },
+      { protocol: 'https', hostname: '**.cdninstagram.com' },
+    ],
+  },
+  // Exclude puppeteer from server bundle — it runs only in the worker process
+  serverExternalPackages: ['puppeteer', 'puppeteer-core', 'bullmq', 'ioredis'],
+}
 
-export default nextConfig;
+export default nextConfig
