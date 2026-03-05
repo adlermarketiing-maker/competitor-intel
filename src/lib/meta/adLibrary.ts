@@ -30,6 +30,7 @@ export async function fetchAdsForCompetitor(
       countries: options.countries,
       activeStatus: options.activeStatus,
       onProgress: options.onProgress,
+      onLog: options.onLog,
     })
 
     if (ads.length === 0) {

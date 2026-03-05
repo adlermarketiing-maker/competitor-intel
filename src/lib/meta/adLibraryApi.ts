@@ -10,6 +10,7 @@ interface FetchAdsApiOptions {
   activeStatus?: 'ACTIVE' | 'INACTIVE' | 'ALL'
   maxAds?: number
   onProgress?: (count: number) => void
+  onLog?: (message: string) => void
 }
 
 interface SearchApiAd {
@@ -35,6 +36,17 @@ interface SearchApiResponse {
   search_information?: { total_results?: number }
   ads?: SearchApiAd[]
   pagination?: { next_page_token?: string }
+  error?: string
+}
+
+interface PageSearchResponse {
+  page_results?: Array<{
+    page_id: string
+    name: string
+    category?: string
+    likes?: number
+    ig_username?: string
+  }>
   error?: string
 }
 
@@ -67,30 +79,80 @@ function mapAd(ad: SearchApiAd): MetaAdRaw {
   }
 }
 
+/**
+ * Search for a Facebook page by name and return its page_id.
+ * Uses SearchAPI's meta_ad_library_page_search engine.
+ */
+export async function findPageId(
+  apiKey: string,
+  searchName: string,
+  onLog?: (msg: string) => void
+): Promise<{ pageId: string; pageName: string } | null> {
+  const log = onLog ?? ((msg: string) => console.log(msg))
+
+  try {
+    const { data } = await axios.get<PageSearchResponse>(SEARCHAPI_URL, {
+      params: {
+        engine: 'meta_ad_library_page_search',
+        api_key: apiKey,
+        q: searchName,
+      },
+    })
+
+    if (data.error || !data.page_results?.length) {
+      log(`No se encontró página de Facebook para "${searchName}"`)
+      return null
+    }
+
+    // Pick the best match — first result is usually the most relevant
+    const page = data.page_results[0]
+    log(`✓ Página encontrada: "${page.name}" (ID: ${page.page_id}, ${page.likes ?? 0} likes)`)
+    return { pageId: page.page_id, pageName: page.name }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    log(`Error buscando página: ${msg}`)
+    return null
+  }
+}
+
 export async function fetchAdsViaSearchApi(
   apiKey: string,
   options: FetchAdsApiOptions
 ): Promise<MetaAdRaw[]> {
   const maxAds = options.maxAds ?? 500
   const allAds: MetaAdRaw[] = []
+  const log = options.onLog ?? ((msg: string) => console.log(msg))
 
+  // Step 1: Resolve page_id
+  let pageId: string | undefined = options.pageIds?.[0]
+
+  if (!pageId && options.searchTerms) {
+    log(`Buscando página de Facebook para "${options.searchTerms}"...`)
+    const found = await findPageId(apiKey, options.searchTerms, options.onLog)
+    if (found) {
+      pageId = found.pageId
+    } else {
+      // No page found — return empty instead of doing a keyword search
+      // that would return unrelated ads
+      return []
+    }
+  }
+
+  if (!pageId) {
+    throw new Error('No se pudo determinar el page_id del competidor')
+  }
+
+  // Step 2: Fetch ads by page_id (not keyword search)
   const params: Record<string, string> = {
     engine: 'meta_ad_library',
     api_key: apiKey,
     ad_type: 'all',
     active_status: (options.activeStatus ?? 'ALL').toLowerCase(),
     country: options.countries[0] ?? 'ALL',
+    page_id: pageId,
   }
 
-  if (options.pageIds?.length) {
-    params.page_id = options.pageIds[0]
-  } else if (options.searchTerms) {
-    params.q = options.searchTerms
-  } else {
-    throw new Error('Either pageIds or searchTerms must be provided')
-  }
-
-  console.log('[SearchAPI] Fetching ads:', { ...params, api_key: '***' })
+  log(`Buscando anuncios de página ${pageId}...`)
 
   let pageNum = 0
 
@@ -120,21 +182,19 @@ export async function fetchAdsViaSearchApi(
     }
 
     if (response.error) {
-      // "didn't return any results" is not an error, just no ads found
       if (response.error.toLowerCase().includes('didn\'t return any results') ||
           response.error.toLowerCase().includes('no results')) {
-        console.log(`[SearchAPI] No results for this search`)
+        console.log(`[SearchAPI] No results for this page`)
         break
       }
       throw new Error(`SearchAPI: ${response.error}`)
     }
 
     if (pageNum === 1 && response.search_information?.total_results !== undefined) {
-      console.log(`[SearchAPI] Total results available: ${response.search_information.total_results}`)
+      log(`Total anuncios disponibles: ${response.search_information.total_results}`)
     }
 
     if (!response.ads || response.ads.length === 0) {
-      console.log(`[SearchAPI] Page ${pageNum}: no more results`)
       break
     }
 
