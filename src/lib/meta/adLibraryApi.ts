@@ -1,6 +1,7 @@
 import axios from 'axios'
-import { createMetaClient } from './client'
 import type { MetaAdRaw } from '@/types/scrape'
+
+const SEARCHAPI_URL = 'https://www.searchapi.io/api/v1/search'
 
 interface FetchAdsApiOptions {
   searchTerms?: string
@@ -11,151 +12,144 @@ interface FetchAdsApiOptions {
   onProgress?: (count: number) => void
 }
 
-const AD_FIELDS = [
-  'id',
-  'ad_archive_id',
-  'page_id',
-  'page_name',
-  'ad_creative_bodies',
-  'ad_creative_link_titles',
-  'ad_creative_link_descriptions',
-  'ad_creative_link_captions',
-  'ad_snapshot_url',
-  'ad_delivery_start_time',
-  'ad_delivery_stop_time',
-  'publisher_platforms',
-].join(',')
-
-interface ApiRecord {
-  id: string
+interface SearchApiAd {
   ad_archive_id?: string
   page_id?: string
-  page_name?: string
-  ad_creative_bodies?: string[]
-  ad_creative_link_titles?: string[]
-  ad_creative_link_descriptions?: string[]
-  ad_creative_link_captions?: string[]
-  ad_snapshot_url?: string
-  ad_delivery_start_time?: string
-  ad_delivery_stop_time?: string
-  publisher_platforms?: string[]
+  snapshot?: {
+    page_name?: string
+    body?: { text?: string }
+    title?: string
+    link_url?: string
+    link_description?: string
+    images?: Array<{ original_image_url?: string; resized_image_url?: string }>
+    videos?: Array<{ video_hd_url?: string; video_sd_url?: string; video_preview_image_url?: string }>
+    cards?: Array<{ body?: string; title?: string; link_url?: string }>
+  }
+  is_active?: boolean
+  start_date?: string
+  end_date?: string
+  publisher_platform?: string[]
 }
 
-interface ApiResponse {
-  data: ApiRecord[]
-  paging?: { next?: string }
+interface SearchApiResponse {
+  search_information?: { total_results?: number }
+  ads?: SearchApiAd[]
+  pagination?: { next_page_token?: string }
+  error?: string
 }
 
-function mapRecord(r: ApiRecord): MetaAdRaw {
+function mapAd(ad: SearchApiAd): MetaAdRaw {
+  const snap = ad.snapshot ?? {}
+  const bodies: string[] = []
+  if (snap.body?.text) bodies.push(snap.body.text)
+  if (snap.cards) {
+    for (const card of snap.cards) {
+      if (card.body) bodies.push(card.body)
+    }
+  }
+
   return {
-    id: r.ad_archive_id ?? r.id,
-    page_id: r.page_id,
-    page_name: r.page_name,
-    ad_creative_bodies: r.ad_creative_bodies,
-    ad_creative_link_titles: r.ad_creative_link_titles,
-    ad_creative_link_descriptions: r.ad_creative_link_descriptions,
-    ad_creative_link_captions: r.ad_creative_link_captions,
-    ad_snapshot_url: r.ad_snapshot_url,
-    ad_delivery_start_time: r.ad_delivery_start_time,
-    ad_delivery_stop_time: r.ad_delivery_stop_time,
-    publisher_platforms: r.publisher_platforms,
+    id: ad.ad_archive_id ?? '',
+    page_id: ad.page_id,
+    page_name: snap.page_name,
+    ad_creative_bodies: bodies.length > 0 ? bodies : undefined,
+    ad_creative_link_titles: snap.title ? [snap.title] : undefined,
+    ad_creative_link_descriptions: snap.link_description ? [snap.link_description] : undefined,
+    ad_creative_link_url: snap.link_url,
+    ad_creative_images: snap.images,
+    ad_creative_videos: snap.videos,
+    ad_delivery_start_time: ad.start_date,
+    ad_delivery_stop_time: ad.end_date,
+    publisher_platforms: ad.publisher_platform,
+    ad_snapshot_url: ad.ad_archive_id
+      ? `https://www.facebook.com/ads/archive/render_ad/?id=${ad.ad_archive_id}`
+      : undefined,
   }
 }
 
-export async function fetchAdsViaApi(
-  token: string,
+export async function fetchAdsViaSearchApi(
+  apiKey: string,
   options: FetchAdsApiOptions
 ): Promise<MetaAdRaw[]> {
-  const client = createMetaClient(token)
   const maxAds = options.maxAds ?? 500
   const allAds: MetaAdRaw[] = []
 
   const params: Record<string, string> = {
-    ad_type: 'ALL',
-    ad_active_status: options.activeStatus ?? 'ALL',
-    ad_reached_countries: JSON.stringify(
-      options.countries.length > 0 ? options.countries : ['ALL']
-    ),
-    fields: AD_FIELDS,
-    limit: '25',
+    engine: 'meta_ad_library',
+    api_key: apiKey,
+    ad_type: 'all',
+    active_status: (options.activeStatus ?? 'ALL').toLowerCase(),
+    country: options.countries[0] ?? 'ALL',
   }
 
   if (options.pageIds?.length) {
-    params.search_page_ids = options.pageIds.join(',')
+    params.page_id = options.pageIds[0]
   } else if (options.searchTerms) {
-    params.search_terms = options.searchTerms
+    params.q = options.searchTerms
   } else {
     throw new Error('Either pageIds or searchTerms must be provided')
   }
 
-  console.log('[AdLibraryAPI] Request params:', JSON.stringify(params, null, 2))
+  console.log('[SearchAPI] Fetching ads:', { ...params, api_key: '***' })
 
-  let nextUrl: string | null = null
-  let page = 0
+  let pageNum = 0
 
   while (true) {
-    page++
-    let response: ApiResponse
+    pageNum++
+    let response: SearchApiResponse
 
     try {
-      if (nextUrl) {
-        const { data } = await axios.get<ApiResponse>(nextUrl)
-        response = data
-      } else {
-        const { data } = await client.get<ApiResponse>('/ads_archive', { params })
-        response = data
-      }
+      const { data } = await axios.get<SearchApiResponse>(SEARCHAPI_URL, { params })
+      response = data
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status
-        const errorData = err.response?.data?.error
-        const fullError = JSON.stringify(err.response?.data ?? {}).substring(0, 500)
-        console.error(`[AdLibraryAPI] HTTP ${status} error: ${fullError}`)
+        const errMsg = err.response?.data?.error ?? err.message
+        console.error(`[SearchAPI] HTTP ${status}: ${errMsg}`)
 
-        if (errorData?.code === 190 || errorData?.error_subcode === 463) {
-          throw new Error(`Token expirado o inválido: ${errorData?.message ?? err.message}`)
+        if (status === 401) {
+          throw new Error('SearchAPI key inválida')
         }
-
-        if (status === 429 || errorData?.code === 32 || errorData?.code === 4) {
-          console.warn(`[AdLibraryAPI] Rate limited, returning ${allAds.length} ads so far`)
+        if (status === 429) {
+          console.warn(`[SearchAPI] Rate limited, returning ${allAds.length} ads so far`)
           break
         }
-
-        throw new Error(`Meta API HTTP ${status}: ${errorData?.message ?? fullError}`)
+        throw new Error(`SearchAPI error (HTTP ${status}): ${errMsg}`)
       }
       throw err
     }
 
-    // Log raw response structure on first page for debugging
-    if (page === 1) {
-      console.log(`[AdLibraryAPI] Response keys: ${Object.keys(response)}`)
-      console.log(`[AdLibraryAPI] data array length: ${response.data?.length ?? 'undefined'}`)
-      if (response.data?.[0]) {
-        console.log(`[AdLibraryAPI] First record keys: ${Object.keys(response.data[0])}`)
-      }
+    if (response.error) {
+      throw new Error(`SearchAPI: ${response.error}`)
     }
 
-    if (!response.data || response.data.length === 0) {
-      console.log(`[AdLibraryAPI] Page ${page}: no more results`)
+    if (pageNum === 1 && response.search_information?.total_results !== undefined) {
+      console.log(`[SearchAPI] Total results available: ${response.search_information.total_results}`)
+    }
+
+    if (!response.ads || response.ads.length === 0) {
+      console.log(`[SearchAPI] Page ${pageNum}: no more results`)
       break
     }
 
-    console.log(`[AdLibraryAPI] Page ${page}: ${response.data.length} ads`)
+    console.log(`[SearchAPI] Page ${pageNum}: ${response.ads.length} ads`)
 
-    for (const record of response.data) {
-      allAds.push(mapRecord(record))
-      if (allAds.length >= maxAds) break
+    for (const ad of response.ads) {
+      if (ad.ad_archive_id) {
+        allAds.push(mapAd(ad))
+        if (allAds.length >= maxAds) break
+      }
     }
 
     options.onProgress?.(allAds.length)
 
-    if (allAds.length >= maxAds || !response.paging?.next) {
+    if (allAds.length >= maxAds || !response.pagination?.next_page_token) {
       break
     }
 
-    nextUrl = response.paging.next
+    params.next_page_token = response.pagination.next_page_token
   }
 
-  console.log(`[AdLibraryAPI] Total: ${allAds.length} ads`)
+  console.log(`[SearchAPI] Total: ${allAds.length} ads`)
   return allAds
 }

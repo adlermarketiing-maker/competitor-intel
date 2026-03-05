@@ -1,4 +1,4 @@
-import { fetchAdsViaApi } from './adLibraryApi'
+import { fetchAdsViaSearchApi } from './adLibraryApi'
 import type { MetaAdRaw } from '@/types/scrape'
 
 interface FetchAdsOptions {
@@ -11,19 +11,20 @@ interface FetchAdsOptions {
 }
 
 export async function fetchAdsForCompetitor(
-  token: string | null,
+  _token: string | null,
   options: FetchAdsOptions
 ): Promise<MetaAdRaw[]> {
   const log = options.onLog ?? ((msg: string) => console.log(msg))
+  const apiKey = process.env.SEARCHAPI_KEY
 
-  if (!token) {
-    log('✗ No hay META_ACCESS_TOKEN configurado. Añádelo en Railway.')
+  if (!apiKey) {
+    log('✗ No hay SEARCHAPI_KEY configurado. Añádelo en Railway.')
     return []
   }
 
   try {
-    log('Consultando Meta Ad Library API...')
-    const ads = await fetchAdsViaApi(token, {
+    log('Consultando Meta Ad Library via SearchAPI...')
+    const ads = await fetchAdsViaSearchApi(apiKey, {
       searchTerms: options.searchTerms,
       pageIds: options.pageIds,
       countries: options.countries,
@@ -34,12 +35,12 @@ export async function fetchAdsForCompetitor(
     if (ads.length === 0) {
       log('La API devolvió 0 anuncios para este competidor')
     } else {
-      log(`✓ ${ads.length} anuncios obtenidos via API`)
+      log(`✓ ${ads.length} anuncios obtenidos`)
     }
     return ads
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    log(`✗ Error API: ${msg}`)
+    log(`✗ Error: ${msg}`)
     throw err
   }
 }
