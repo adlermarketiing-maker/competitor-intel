@@ -1,4 +1,4 @@
-import { scrapeAdLibrary } from './adLibraryScraper'
+import { fetchAdsViaApi } from './adLibraryApi'
 import type { MetaAdRaw } from '@/types/scrape'
 
 interface FetchAdsOptions {
@@ -11,28 +11,35 @@ interface FetchAdsOptions {
 }
 
 export async function fetchAdsForCompetitor(
-  _token: string | null,
+  token: string | null,
   options: FetchAdsOptions
 ): Promise<MetaAdRaw[]> {
   const log = options.onLog ?? ((msg: string) => console.log(msg))
 
+  if (!token) {
+    log('✗ No hay META_ACCESS_TOKEN configurado. Añádelo en Railway.')
+    return []
+  }
+
   try {
-    log('[Scraper] Lanzando Puppeteer scraper...')
-    const ads = await scrapeAdLibrary({
+    log('Consultando Meta Ad Library API...')
+    const ads = await fetchAdsViaApi(token, {
       searchTerms: options.searchTerms,
       pageIds: options.pageIds,
       countries: options.countries,
+      activeStatus: options.activeStatus,
       onProgress: options.onProgress,
     })
+
     if (ads.length === 0) {
-      log('[Scraper] Scraper devolvió 0 anuncios (posible bloqueo de Facebook o cookies expiradas)')
+      log('La API devolvió 0 anuncios para este competidor')
     } else {
-      log(`[Scraper] ✓ ${ads.length} anuncios obtenidos`)
+      log(`✓ ${ads.length} anuncios obtenidos via API`)
     }
     return ads
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    log(`[Scraper] ✗ Error: ${msg}`)
+    log(`✗ Error API: ${msg}`)
     throw err
   }
 }
