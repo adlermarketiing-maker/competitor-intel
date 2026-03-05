@@ -120,6 +120,12 @@ export async function fetchAdsViaSearchApi(
     }
 
     if (response.error) {
+      // "didn't return any results" is not an error, just no ads found
+      if (response.error.toLowerCase().includes('didn\'t return any results') ||
+          response.error.toLowerCase().includes('no results')) {
+        console.log(`[SearchAPI] No results for this search`)
+        break
+      }
       throw new Error(`SearchAPI: ${response.error}`)
     }
 
