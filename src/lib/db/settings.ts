@@ -21,6 +21,10 @@ export async function saveMetaToken(token: string, expiresAt?: Date) {
 }
 
 export async function getMetaToken(): Promise<string | null> {
+  // Always prefer the environment variable so token updates in Railway take effect immediately
+  if (process.env.META_ACCESS_TOKEN) {
+    return process.env.META_ACCESS_TOKEN
+  }
   const settings = await getSettings()
   if (!settings?.metaToken) return null
   return decrypt(settings.metaToken)
