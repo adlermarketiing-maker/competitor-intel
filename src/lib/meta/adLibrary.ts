@@ -8,16 +8,19 @@ interface FetchAdsOptions {
   countries: string[]
   activeStatus?: 'ACTIVE' | 'INACTIVE' | 'ALL'
   onProgress?: (count: number) => void
+  onLog?: (message: string) => void
 }
 
 export async function fetchAdsForCompetitor(
   token: string | null,
   options: FetchAdsOptions
 ): Promise<MetaAdRaw[]> {
+  const log = options.onLog ?? ((msg: string) => console.log(msg))
+
   // Primary: use the Graph API if we have a token
   if (token) {
     try {
-      console.log('[AdLibrary] Using Graph API (token available)')
+      log('[API] Intentando Meta Graph API...')
       const ads = await fetchAdsViaApi(token, {
         searchTerms: options.searchTerms,
         pageIds: options.pageIds,
@@ -27,25 +30,40 @@ export async function fetchAdsForCompetitor(
       })
 
       if (ads.length > 0) {
+        log(`[API] ✓ ${ads.length} anuncios obtenidos via API`)
         return ads
       }
 
-      console.log('[AdLibrary] Graph API returned 0 ads, falling back to scraper')
+      log('[API] API devolvió 0 anuncios, probando scraper...')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[AdLibrary] Graph API failed: ${msg}, falling back to scraper`)
+      log(`[API] ✗ Error: ${msg}`)
+      log('[API] Probando scraper como fallback...')
     }
   } else {
-    console.log('[AdLibrary] No token available, using scraper directly')
+    log('[Scraper] No hay token META_ACCESS_TOKEN, usando scraper directamente')
   }
 
   // Fallback: Puppeteer scraper
-  return scrapeAdLibrary({
-    searchTerms: options.searchTerms,
-    pageIds: options.pageIds,
-    countries: options.countries,
-    onProgress: options.onProgress,
-  })
+  try {
+    log('[Scraper] Lanzando Puppeteer scraper...')
+    const ads = await scrapeAdLibrary({
+      searchTerms: options.searchTerms,
+      pageIds: options.pageIds,
+      countries: options.countries,
+      onProgress: options.onProgress,
+    })
+    if (ads.length === 0) {
+      log('[Scraper] Scraper devolvió 0 anuncios (posible bloqueo de Facebook)')
+    } else {
+      log(`[Scraper] ✓ ${ads.length} anuncios obtenidos via scraper`)
+    }
+    return ads
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    log(`[Scraper] ✗ Error: ${msg}`)
+    throw err
+  }
 }
 
 export function buildAdLibraryUrl(fbPageName: string, countries: string[]): string {

@@ -88,10 +88,7 @@ export async function fetchAdsViaApi(
     throw new Error('Either pageIds or searchTerms must be provided')
   }
 
-  console.log('[AdLibraryAPI] Fetching ads with params:', {
-    ...params,
-    access_token: '***',
-  })
+  console.log('[AdLibraryAPI] Request params:', JSON.stringify(params, null, 2))
 
   let nextUrl: string | null = null
   let page = 0
@@ -112,19 +109,30 @@ export async function fetchAdsViaApi(
       if (axios.isAxiosError(err)) {
         const status = err.response?.status
         const errorData = err.response?.data?.error
+        const fullError = JSON.stringify(err.response?.data ?? {}).substring(0, 500)
+        console.error(`[AdLibraryAPI] HTTP ${status} error: ${fullError}`)
 
-        if (status === 190 || errorData?.code === 190) {
-          throw new Error(`Meta token expired or invalid: ${errorData?.message ?? err.message}`)
+        if (errorData?.code === 190 || errorData?.error_subcode === 463) {
+          throw new Error(`Token expirado o inválido: ${errorData?.message ?? err.message}`)
         }
 
         if (status === 429 || errorData?.code === 32 || errorData?.code === 4) {
-          console.warn(`[AdLibraryAPI] Rate limited on page ${page}, returning ${allAds.length} ads so far`)
+          console.warn(`[AdLibraryAPI] Rate limited, returning ${allAds.length} ads so far`)
           break
         }
 
-        throw new Error(`Meta API error (HTTP ${status}): ${errorData?.message ?? err.message}`)
+        throw new Error(`Meta API HTTP ${status}: ${errorData?.message ?? fullError}`)
       }
       throw err
+    }
+
+    // Log raw response structure on first page for debugging
+    if (page === 1) {
+      console.log(`[AdLibraryAPI] Response keys: ${Object.keys(response)}`)
+      console.log(`[AdLibraryAPI] data array length: ${response.data?.length ?? 'undefined'}`)
+      if (response.data?.[0]) {
+        console.log(`[AdLibraryAPI] First record keys: ${Object.keys(response.data[0])}`)
+      }
     }
 
     if (!response.data || response.data.length === 0) {
@@ -132,7 +140,7 @@ export async function fetchAdsViaApi(
       break
     }
 
-    console.log(`[AdLibraryAPI] Page ${page}: received ${response.data.length} ads`)
+    console.log(`[AdLibraryAPI] Page ${page}: ${response.data.length} ads`)
 
     for (const record of response.data) {
       allAds.push(mapRecord(record))
@@ -148,6 +156,6 @@ export async function fetchAdsViaApi(
     nextUrl = response.paging.next
   }
 
-  console.log(`[AdLibraryAPI] Done: ${allAds.length} ads fetched`)
+  console.log(`[AdLibraryAPI] Total: ${allAds.length} ads`)
   return allAds
 }

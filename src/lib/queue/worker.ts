@@ -18,6 +18,30 @@ async function emit(jobId: string, type: string, message: string, extra?: object
   await publishJobEvent(jobId, { type, message, ...extra })
 }
 
+/**
+ * Returns true if the page name found in Meta Ad Library reasonably matches the competitor name.
+ * Prevents saving a wrong page ID when keyword search returns unrelated pages.
+ */
+function pageNameMatchesCompetitor(pageName: string, competitorName: string): boolean {
+  if (!pageName) return false
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // strip accents
+      .replace(/[^a-z0-9\s]/g, '')
+      .trim()
+  const normPage = normalize(pageName)
+  const normComp = normalize(competitorName)
+
+  // Exact or substring match
+  if (normPage.includes(normComp) || normComp.includes(normPage)) return true
+
+  // Any significant word (>3 chars) from competitor name appears in page name
+  const compWords = normComp.split(/\s+/).filter((w) => w.length > 3)
+  return compWords.some((word) => normPage.includes(word))
+}
+
 async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
   const { jobDbId, competitorId, jobType, countries } = job.data
 
@@ -51,6 +75,9 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
         onProgress: async (count) => {
           await emit(jobDbId, 'progress', `Anuncios encontrados: ${count}...`)
         },
+        onLog: async (msg) => {
+          await emit(jobDbId, 'progress', msg)
+        },
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -64,18 +91,28 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
 
     // Resolve page ID and profile URLs from first ad if not already set
     if (adsRaw.length > 0 && !competitor.fbPageId) {
+      // Only save the page ID if the found page name actually resembles the competitor name
+      // (prevents saving a wrong page ID when search matches unrelated ads)
       const firstAd = adsRaw[0]
       const pageId = firstAd.page_id
-      const pageName = firstAd.page_name || competitor.fbPageName || competitor.name
+      const foundPageName = firstAd.page_name ?? ''
+      const isMatchingPage = pageNameMatchesCompetitor(foundPageName, competitor.name)
 
       const updateData: Record<string, string> = {}
-      if (pageId) updateData.fbPageId = pageId
-      if (pageName) {
-        updateData.facebookUrl = buildFacebookPageUrl(pageName)
-        updateData.instagramUrl = competitor.instagramUrl || buildInstagramUrl(pageName)
-        updateData.adLibraryUrl = buildAdLibraryUrl(pageName, effectiveCountries)
+      if (pageId && isMatchingPage) {
+        updateData.fbPageId = pageId
+        await emit(jobDbId, 'progress', `✓ Page ID detectado: ${pageId} (${foundPageName})`)
+      } else if (pageId && !isMatchingPage) {
+        await emit(jobDbId, 'progress', `⚠ Página encontrada "${foundPageName}" no coincide con "${competitor.name}" — no se guarda el Page ID`)
       }
-      await updateCompetitor(competitorId, updateData)
+
+      const pageName = firstAd.page_name || competitor.fbPageName || competitor.name
+      if (pageName) {
+        updateData.adLibraryUrl = buildAdLibraryUrl(pageName, effectiveCountries)
+        if (!competitor.facebookUrl) updateData.facebookUrl = buildFacebookPageUrl(pageName)
+        if (!competitor.instagramUrl) updateData.instagramUrl = buildInstagramUrl(pageName)
+      }
+      if (Object.keys(updateData).length > 0) await updateCompetitor(competitorId, updateData)
     } else if (!competitor.adLibraryUrl) {
       const pageName = competitor.fbPageName || competitor.name
       await updateCompetitor(competitorId, {
@@ -97,6 +134,50 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     }
 
     await emit(jobDbId, 'progress', `✓ ${completedTasks} anuncios guardados`)
+  }
+
+  // ── Step 1b: Extract real social links from competitor's own website ────────
+  const freshCompetitor = await getCompetitor(competitorId)
+  if (freshCompetitor?.websiteUrl && (!freshCompetitor.instagramUrl || !freshCompetitor.facebookUrl)) {
+    try {
+      await emit(jobDbId, 'progress', `Extrayendo redes sociales desde ${freshCompetitor.websiteUrl}...`)
+      const siteContent = await scrapePage(freshCompetitor.websiteUrl)
+      const socialUpdates: Record<string, string> = {}
+
+      for (const link of siteContent.outboundLinks) {
+        try {
+          const parsed = new URL(link)
+          const hostname = parsed.hostname.replace(/^www\./, '')
+          const clean = link.split('?')[0].replace(/\/$/, '')
+
+          if (!socialUpdates.instagramUrl && !freshCompetitor.instagramUrl && hostname === 'instagram.com') {
+            // Avoid post/reel/story links — only profile URLs
+            if (!/\/(p|reel|tv|stories)\//.test(parsed.pathname)) {
+              socialUpdates.instagramUrl = clean
+            }
+          }
+          if (!socialUpdates.facebookUrl && !freshCompetitor.facebookUrl && hostname === 'facebook.com') {
+            // Avoid facebook.com/ads or other meta pages
+            if (!/\/(ads|business|pages\/create)/.test(parsed.pathname)) {
+              socialUpdates.facebookUrl = clean
+            }
+          }
+        } catch {
+          // ignore malformed URLs
+        }
+      }
+
+      if (Object.keys(socialUpdates).length > 0) {
+        await updateCompetitor(competitorId, socialUpdates)
+        const found = Object.entries(socialUpdates).map(([k, v]) => `${k}: ${v}`).join(', ')
+        await emit(jobDbId, 'progress', `✓ Redes sociales encontradas en web: ${found}`)
+      } else {
+        await emit(jobDbId, 'progress', `Sin redes sociales en la web del competidor`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      await emit(jobDbId, 'error', `Error extrayendo redes sociales de web: ${msg}`)
+    }
   }
 
   // ── Step 2: Scrape landing pages ────────────────────────────────────────────
