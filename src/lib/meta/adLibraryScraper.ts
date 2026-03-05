@@ -169,6 +169,22 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
     await page.setViewport({ width: 1280, height: 900 })
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8' })
 
+    // Inject Facebook session cookies if provided (bypasses rate limiting on datacenter IPs)
+    const fbCookiesEnv = process.env.FACEBOOK_COOKIES
+    if (fbCookiesEnv) {
+      try {
+        const cookies = JSON.parse(fbCookiesEnv) as Array<{ name: string; value: string }>
+        await page.setCookie(
+          ...cookies.map((c) => ({ name: c.name, value: c.value, domain: '.facebook.com' }))
+        )
+        console.log(`[Scraper] Injected ${cookies.length} Facebook session cookies`)
+      } catch {
+        console.log('[Scraper] Warning: FACEBOOK_COOKIES env var is not valid JSON, ignoring')
+      }
+    } else {
+      console.log('[Scraper] No FACEBOOK_COOKIES env var — requests will be unauthenticated (may hit rate limit)')
+    }
+
     // Intercept Facebook's internal GraphQL responses (where the real ads data lives)
     page.on('response', async (response) => {
       const responseUrl = response.url()
