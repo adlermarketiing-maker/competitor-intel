@@ -1,3 +1,4 @@
+import { fetchAdsViaApi } from './adLibraryApi'
 import { scrapeAdLibrary } from './adLibraryScraper'
 import type { MetaAdRaw } from '@/types/scrape'
 
@@ -10,9 +11,35 @@ interface FetchAdsOptions {
 }
 
 export async function fetchAdsForCompetitor(
-  _token: string | null,
+  token: string | null,
   options: FetchAdsOptions
 ): Promise<MetaAdRaw[]> {
+  // Primary: use the Graph API if we have a token
+  if (token) {
+    try {
+      console.log('[AdLibrary] Using Graph API (token available)')
+      const ads = await fetchAdsViaApi(token, {
+        searchTerms: options.searchTerms,
+        pageIds: options.pageIds,
+        countries: options.countries,
+        activeStatus: options.activeStatus,
+        onProgress: options.onProgress,
+      })
+
+      if (ads.length > 0) {
+        return ads
+      }
+
+      console.log('[AdLibrary] Graph API returned 0 ads, falling back to scraper')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[AdLibrary] Graph API failed: ${msg}, falling back to scraper`)
+    }
+  } else {
+    console.log('[AdLibrary] No token available, using scraper directly')
+  }
+
+  // Fallback: Puppeteer scraper
   return scrapeAdLibrary({
     searchTerms: options.searchTerms,
     pageIds: options.pageIds,
