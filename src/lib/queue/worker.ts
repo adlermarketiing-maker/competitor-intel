@@ -16,6 +16,40 @@ async function emit(jobId: string, type: string, message: string, extra?: object
   await publishJobEvent(jobId, { type, message, ...extra })
 }
 
+/** Strip fragment (#...) and trailing slash so url.com and url.com#precio are the same */
+function normalizeUrl(url: string): string {
+  try {
+    const u = new URL(url)
+    u.hash = ''
+    // Remove trailing slash except for root
+    let str = u.toString()
+    if (str.endsWith('/') && u.pathname !== '/') str = str.slice(0, -1)
+    return str
+  } catch {
+    return url.split('#')[0]
+  }
+}
+
+/** URLs that are never useful as landing pages */
+function isJunkUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    const hostname = u.hostname.replace(/^www\./, '')
+    const path = u.pathname.toLowerCase()
+    // Instagram login / profile pages (not useful)
+    if (hostname === 'instagram.com' || hostname === 'www.instagram.com') return true
+    // Privacy, legal, cookies pages
+    if (/\/(privacy|privacidad|legal|terms|terminos|cookies|aviso-legal|politica-de-privacidad|cookie-policy|terms-of-service)\b/i.test(path)) return true
+    // Non-page resources
+    if (/\.(pdf|zip|mp3|mp4|avi|mov|doc|docx|xls|xlsx)$/i.test(path)) return true
+    // mailto/tel/javascript
+    if (/^(mailto|tel|javascript):/.test(url)) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
 /**
  * Returns true if the page name found in Meta Ad Library reasonably matches the competitor name.
  */
@@ -173,7 +207,15 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
 
   // ── Step 2: Discover and scrape ALL landing pages ─────────────────────────
   if (jobType === 'FULL_SCRAPE' || jobType === 'LANDING_PAGES') {
-    const discoveredUrls = new Map<string, string>() // url -> source label
+    const discoveredUrls = new Map<string, string>() // normalized url -> source label
+
+    /** Add a URL to the discovery map, normalizing and filtering junk */
+    const addUrl = (url: string, source: string) => {
+      const norm = normalizeUrl(url)
+      if (!discoveredUrls.has(norm) && !isJunkUrl(norm)) {
+        discoveredUrls.set(norm, source)
+      }
+    }
 
     // Source A: Landing URLs from ads
     const { db } = await import('@/lib/db/client')
@@ -182,9 +224,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       select: { id: true, landingUrl: true },
     })
     for (const ad of ads) {
-      if (ad.landingUrl && !discoveredUrls.has(ad.landingUrl)) {
-        discoveredUrls.set(ad.landingUrl, 'ad')
-      }
+      if (ad.landingUrl) addUrl(ad.landingUrl, 'ad')
     }
     await emit(jobDbId, 'progress', `${discoveredUrls.size} URLs de anuncios`)
 
@@ -196,9 +236,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
         const siteContent = await scrapePage(latestComp.websiteUrl)
 
         // Save homepage as a landing page too
-        if (!discoveredUrls.has(siteContent.url)) {
-          discoveredUrls.set(siteContent.url, 'homepage')
-        }
+        addUrl(siteContent.url, 'homepage')
 
         // Helper: collect internal links from a page's outbound links
         const collectInternalLinks = (outboundLinks: string[], baseUrl: string): string[] => {
@@ -221,7 +259,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
         await emit(jobDbId, 'progress', `${level1Links.length} links internos en homepage`)
 
         for (const link of level1Links) {
-          if (!discoveredUrls.has(link)) discoveredUrls.set(link, 'website')
+          addUrl(link, 'website')
         }
 
         // Level 2: crawl each level-1 page to find deeper links
@@ -232,16 +270,13 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
             const subContent = await scrapePage(subUrl)
             const level2Links = collectInternalLinks(subContent.outboundLinks, latestComp.websiteUrl)
             for (const link of level2Links) {
-              if (!discoveredUrls.has(link)) {
-                discoveredUrls.set(link, 'website-deep')
-                level2Count++
-              }
+              const before = discoveredUrls.size
+              addUrl(link, 'website-deep')
+              if (discoveredUrls.size > before) level2Count++
             }
             // Check for link-in-bio in subpages too
             for (const link of subContent.outboundLinks) {
-              if (isLinkInBioService(link) && !discoveredUrls.has(link)) {
-                discoveredUrls.set(link, 'linkinbio')
-              }
+              if (isLinkInBioService(link)) addUrl(link, 'linkinbio')
             }
             await new Promise((r) => setTimeout(r, 800))
           } catch { /* ignore errors on individual subpages */ }
@@ -252,9 +287,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
 
         // Check for link-in-bio services in homepage outbound links
         for (const link of siteContent.outboundLinks) {
-          if (isLinkInBioService(link) && !discoveredUrls.has(link)) {
-            discoveredUrls.set(link, 'linkinbio')
-          }
+          if (isLinkInBioService(link)) addUrl(link, 'linkinbio')
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -272,15 +305,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
         // Instagram pages often have the bio link as an outbound link
         for (const link of igContent.outboundLinks) {
           try {
-            if (
-              !isSocialMediaUrl(link) &&
-              !discoveredUrls.has(link)
-            ) {
-              if (isLinkInBioService(link)) {
-                discoveredUrls.set(link, 'ig-linkinbio')
-              } else {
-                discoveredUrls.set(link, 'ig-bio')
-              }
+            if (!isSocialMediaUrl(link)) {
+              addUrl(link, isLinkInBioService(link) ? 'ig-linkinbio' : 'ig-bio')
             }
           } catch { /* ignore */ }
         }
@@ -302,12 +328,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
 
         for (const link of bioContent.outboundLinks) {
           try {
-            if (
-              !isSocialMediaUrl(link) &&
-              !discoveredUrls.has(link)
-            ) {
-              discoveredUrls.set(link, 'linkinbio-link')
-            }
+            if (!isSocialMediaUrl(link)) addUrl(link, 'linkinbio-link')
           } catch { /* ignore */ }
         }
         await new Promise((r) => setTimeout(r, 800))
@@ -320,7 +341,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     // Build a map of landing URL -> ad ID for linking
     const urlToAdId = new Map<string, string>()
     for (const ad of ads) {
-      if (ad.landingUrl) urlToAdId.set(ad.landingUrl, ad.id)
+      if (ad.landingUrl) urlToAdId.set(normalizeUrl(ad.landingUrl), ad.id)
     }
 
     // Now scrape all discovered URLs
