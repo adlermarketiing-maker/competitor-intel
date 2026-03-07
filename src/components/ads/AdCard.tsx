@@ -85,7 +85,9 @@ export default function AdCard({ ad, showCompetitor = false }: AdCardProps) {
           </span>
           {ad.adSnapshotUrl && (
             <a
-              href={ad.adSnapshotUrl.replace('/ads/archive/render_ad/?id=', '/ads/library/?id=')}
+              href={ad.adSnapshotUrl
+                .replace('/ads/archive/render_ad/?id=', '/ads/library/?active_status=all&ad_type=all&country=ALL&id=')
+                .replace(/\/ads\/library\/\?id=(\d+)$/, '/ads/library/?active_status=all&ad_type=all&country=ALL&id=$1')}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-slate-500 hover:text-violet-600 font-medium"

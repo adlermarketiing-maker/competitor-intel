@@ -97,7 +97,7 @@ function mapToMetaAdRaw(node: Record<string, unknown>): MetaAdRaw | null {
         : String(endDate)
       : undefined,
     publisher_platforms: node.publisher_platform as string[] | undefined,
-    ad_snapshot_url: `https://www.facebook.com/ads/library/?id=${id}`,
+    ad_snapshot_url: `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${id}`,
   }
 }
 
@@ -267,7 +267,7 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
           seenIds.add(adId)
           ads.push({
             id: adId,
-            ad_snapshot_url: `https://www.facebook.com/ads/library/?id=${adId}`,
+            ad_snapshot_url: `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${adId}`,
           })
         }
       }

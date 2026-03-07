@@ -60,6 +60,14 @@ function mapAd(ad: SearchApiAd): MetaAdRaw {
     }
   }
 
+  // Extract link URL: prefer snapshot-level, fallback to first card link
+  let linkUrl = snap.link_url
+  if (!linkUrl && snap.cards) {
+    for (const card of snap.cards) {
+      if (card.link_url) { linkUrl = card.link_url; break }
+    }
+  }
+
   return {
     id: ad.ad_archive_id ?? '',
     page_id: ad.page_id,
@@ -67,14 +75,14 @@ function mapAd(ad: SearchApiAd): MetaAdRaw {
     ad_creative_bodies: bodies.length > 0 ? bodies : undefined,
     ad_creative_link_titles: snap.title ? [snap.title] : undefined,
     ad_creative_link_descriptions: snap.link_description ? [snap.link_description] : undefined,
-    ad_creative_link_url: snap.link_url,
+    ad_creative_link_url: linkUrl,
     ad_creative_images: snap.images,
     ad_creative_videos: snap.videos,
     ad_delivery_start_time: ad.start_date,
     ad_delivery_stop_time: ad.end_date,
     publisher_platforms: ad.publisher_platform,
     ad_snapshot_url: ad.ad_archive_id
-      ? `https://www.facebook.com/ads/library/?id=${ad.ad_archive_id}`
+      ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.ad_archive_id}`
       : undefined,
   }
 }
