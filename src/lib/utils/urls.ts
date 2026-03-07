@@ -55,6 +55,76 @@ export function detectPageType(url: string, title?: string): string {
   return 'landing'
 }
 
+export function isSocialMediaUrl(url: string): boolean {
+  const socialDomains = [
+    'instagram.com',
+    'facebook.com',
+    'fb.com',
+    'fb.watch',
+    'twitter.com',
+    'x.com',
+    'tiktok.com',
+    'youtube.com',
+    'youtu.be',
+    'linkedin.com',
+    'pinterest.com',
+    'snapchat.com',
+    't.me',
+    'telegram.me',
+    'wa.me',
+    'whatsapp.com',
+  ]
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, '')
+    return socialDomains.some((d) => hostname === d || hostname.endsWith('.' + d))
+  } catch {
+    return false
+  }
+}
+
+export function isFunnelEntryUrl(url: string): boolean {
+  const entryPatterns = [
+    /\/reto/i,
+    /\/challenge/i,
+    /\/webinar/i,
+    /\/masterclass/i,
+    /\/clase/i,
+    /\/taller/i,
+    /\/workshop/i,
+    /\/curso/i,
+    /\/training/i,
+    /\/registro/i,
+    /\/register/i,
+    /\/inscri/i,
+    /\/signup/i,
+    /\/sign-up/i,
+    /\/oferta/i,
+    /\/offer/i,
+    /\/promo/i,
+    /\/landing/i,
+    /\/lp\//i,
+    /\/optin/i,
+    /\/opt-in/i,
+    /\/lead/i,
+    /\/free/i,
+    /\/gratis/i,
+    /\/regalo/i,
+    /\/descarga/i,
+    /\/download/i,
+    /\/ebook/i,
+    /\/guia/i,
+    /\/guide/i,
+    /\/sesion/i,
+    /\/session/i,
+    /\/demo/i,
+    /\/trial/i,
+    /\/prueba/i,
+    /\/reserva/i,
+    /\/book/i,
+  ]
+  return entryPatterns.some((p) => p.test(url))
+}
+
 export function isKnownPaymentPlatform(url: string): boolean {
   const platforms = [
     'hotmart.com',

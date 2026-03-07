@@ -29,7 +29,10 @@ export async function upsertLandingPage(adId: string | null, content: ScrapedPag
 export async function getLandingPagesForCompetitor(competitorId: string) {
   return db.landingPage.findMany({
     where: {
-      ad: { competitorId },
+      OR: [
+        { ad: { competitorId } },
+        { funnelSteps: { some: { competitorId } } },
+      ],
     },
     orderBy: { scrapedAt: 'desc' },
   })

@@ -97,7 +97,7 @@ function mapToMetaAdRaw(node: Record<string, unknown>): MetaAdRaw | null {
         : String(endDate)
       : undefined,
     publisher_platforms: node.publisher_platform as string[] | undefined,
-    ad_snapshot_url: `https://www.facebook.com/ads/archive/render_ad/?id=${id}`,
+    ad_snapshot_url: `https://www.facebook.com/ads/library/?id=${id}`,
   }
 }
 
@@ -124,11 +124,11 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
   const country = options.countries[0] ?? 'ALL'
   const maxAds = options.maxAds ?? 100
 
-  // Use ALL countries for broader results; keyword_unordered finds ads by content/page name
+  // search_type=page finds the actual Facebook Page matching the name (not random ads containing the word)
   const searchCountry = options.pageIds?.length ? country : 'ALL'
   const url = options.pageIds?.length
     ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${searchCountry}&view_all_page_id=${options.pageIds[0]}`
-    : `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${searchCountry}&q=${encodeURIComponent(options.searchTerms ?? '')}&search_type=keyword_unordered`
+    : `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${searchCountry}&q=${encodeURIComponent(options.searchTerms ?? '')}&search_type=page`
 
   console.log(`[Scraper] Starting scrape: ${url}`)
 
@@ -267,7 +267,7 @@ export async function scrapeAdLibrary(options: FetchAdsOptions): Promise<MetaAdR
           seenIds.add(adId)
           ads.push({
             id: adId,
-            ad_snapshot_url: `https://www.facebook.com/ads/archive/render_ad/?id=${adId}`,
+            ad_snapshot_url: `https://www.facebook.com/ads/library/?id=${adId}`,
           })
         }
       }

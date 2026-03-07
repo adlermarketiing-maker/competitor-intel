@@ -11,6 +11,7 @@ import { updateScrapeJob, getScrapeJob } from '@/lib/db/jobs'
 import { getCompetitor, updateCompetitor } from '@/lib/db/competitors'
 import { scrapePage } from '@/lib/scraper/puppeteer'
 import { detectFunnelChain } from '@/lib/scraper/funnel'
+import { isFunnelEntryUrl, isSameDomain, isSocialMediaUrl } from '@/lib/utils/urls'
 import { randomUUID } from 'crypto'
 import type { ScrapeJobData, JobStatus } from '@/types/scrape'
 
@@ -232,6 +233,82 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
 
       // Pause between pages to be polite
       await new Promise((r) => setTimeout(r, 1000))
+    }
+  }
+
+  // ── Step 3: Crawl competitor website for additional funnels ─────────────────
+  if (jobType === 'FULL_SCRAPE') {
+    const latestComp = await getCompetitor(competitorId)
+    if (latestComp?.websiteUrl) {
+      try {
+        await emit(jobDbId, 'progress', `Rastreando web del competidor para detectar funnels...`)
+        const siteContent = await scrapePage(latestComp.websiteUrl)
+
+        // Collect all already-tracked funnel URLs to avoid duplicates
+        const { db: prismaDb } = await import('@/lib/db/client')
+        const existingSteps = await prismaDb.funnelStep.findMany({
+          where: { competitorId },
+          select: { url: true },
+        })
+        const trackedUrls = new Set(existingSteps.map((s) => s.url))
+
+        // Find internal links that look like funnel entry points
+        const entryUrls = siteContent.outboundLinks.filter((link) => {
+          try {
+            return (
+              isSameDomain(link, latestComp.websiteUrl!) &&
+              isFunnelEntryUrl(link) &&
+              !isSocialMediaUrl(link) &&
+              !trackedUrls.has(link)
+            )
+          } catch { return false }
+        })
+
+        // Deduplicate by path
+        const uniqueEntries = [...new Map(entryUrls.map((u) => {
+          try { return [new URL(u).pathname, u] } catch { return [u, u] }
+        })).values()]
+
+        if (uniqueEntries.length > 0) {
+          await emit(jobDbId, 'progress', `${uniqueEntries.length} posibles funnels encontrados en la web`)
+
+          for (const entryUrl of uniqueEntries.slice(0, 10)) {
+            try {
+              await emit(jobDbId, 'progress', `Analizando funnel: ${entryUrl}`)
+              const funnelChain = await detectFunnelChain(entryUrl, async (step) => {
+                await emit(jobDbId, 'progress', `  Paso: ${step.url}`)
+              })
+
+              if (funnelChain.length >= 1) {
+                const funnelId = randomUUID()
+                // Save landing page for the entry
+                const entryContent = funnelChain[0].content
+                const lp = await upsertLandingPage(null, entryContent)
+
+                await saveFunnelSteps(
+                  competitorId,
+                  funnelId,
+                  funnelChain.map((s) => ({
+                    url: s.url,
+                    pageType: s.pageType,
+                    landingPageId: s.url === lp.url ? lp.id : undefined,
+                  }))
+                )
+                await emit(jobDbId, 'progress', `✓ Funnel detectado (${funnelChain.length} pasos)`)
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              await emit(jobDbId, 'error', `Error analizando ${entryUrl}: ${msg}`)
+            }
+            await new Promise((r) => setTimeout(r, 1000))
+          }
+        } else {
+          await emit(jobDbId, 'progress', `Sin funnels adicionales en la web`)
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        await emit(jobDbId, 'error', `Error rastreando web: ${msg}`)
+      }
     }
   }
 

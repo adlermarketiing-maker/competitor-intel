@@ -74,7 +74,7 @@ function mapAd(ad: SearchApiAd): MetaAdRaw {
     ad_delivery_stop_time: ad.end_date,
     publisher_platforms: ad.publisher_platform,
     ad_snapshot_url: ad.ad_archive_id
-      ? `https://www.facebook.com/ads/archive/render_ad/?id=${ad.ad_archive_id}`
+      ? `https://www.facebook.com/ads/library/?id=${ad.ad_archive_id}`
       : undefined,
   }
 }
