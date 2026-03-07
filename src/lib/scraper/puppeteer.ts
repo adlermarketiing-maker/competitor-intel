@@ -1,7 +1,4 @@
 import puppeteer, { Browser } from 'puppeteer'
-import path from 'path'
-import fs from 'fs'
-import { randomUUID } from 'crypto'
 import { extractContent } from './extractor'
 import type { ScrapedPageContent } from '@/types/scrape'
 
@@ -34,14 +31,6 @@ export async function closeBrowser(): Promise<void> {
   }
 }
 
-const SCREENSHOTS_DIR = path.join(process.cwd(), 'public', 'screenshots')
-
-function ensureScreenshotsDir() {
-  if (!fs.existsSync(SCREENSHOTS_DIR)) {
-    fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true })
-  }
-}
-
 export async function scrapePage(url: string): Promise<ScrapedPageContent> {
   const browser = await getBrowser()
   const page = await browser.newPage()
@@ -67,16 +56,14 @@ export async function scrapePage(url: string): Promise<ScrapedPageContent> {
 
     const html = await page.content()
 
-    // Screenshot
-    ensureScreenshotsDir()
-    const screenshotId = randomUUID()
-    const screenshotFile = path.join(SCREENSHOTS_DIR, `${screenshotId}.png`)
-    await page.screenshot({
-      path: screenshotFile as `${string}.png`,
+    // Screenshot as base64 data URL (persists in DB, works on Railway ephemeral filesystem)
+    const screenshotBuffer = await page.screenshot({
+      type: 'jpeg',
+      quality: 50,
       fullPage: false,
       clip: { x: 0, y: 0, width: 1280, height: 800 },
     })
-    const screenshotPath = `/screenshots/${screenshotId}.png`
+    const screenshotPath = `data:image/jpeg;base64,${Buffer.from(screenshotBuffer).toString('base64')}`
 
     const extracted = extractContent(html, finalUrl)
 

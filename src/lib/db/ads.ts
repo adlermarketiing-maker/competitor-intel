@@ -6,6 +6,11 @@ export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
     .map((img) => img.resized_image_url || img.original_image_url)
     .filter(Boolean) as string[]
 
+  // Add video preview thumbnails as images (so video ads have a visible thumbnail)
+  for (const v of raw.ad_creative_videos || []) {
+    if (v.video_preview_image_url) imageUrls.push(v.video_preview_image_url)
+  }
+
   const videoUrls = (raw.ad_creative_videos || [])
     .map((v) => v.video_hd_url || v.video_sd_url)
     .filter(Boolean) as string[]
