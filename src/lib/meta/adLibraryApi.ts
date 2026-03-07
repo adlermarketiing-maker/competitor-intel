@@ -168,7 +168,7 @@ export async function fetchAdsViaSearchApi(
     api_key: apiKey,
     ad_type: 'all',
     active_status: (options.activeStatus ?? 'ALL').toLowerCase(),
-    country: options.countries[0] ?? 'ALL',
+    country: 'ALL',
     page_id: pageId,
   }
 
@@ -215,6 +215,7 @@ export async function fetchAdsViaSearchApi(
     }
 
     if (!response.ads || response.ads.length === 0) {
+      log(`Paginación terminada: página ${pageNum} sin anuncios`)
       break
     }
 
@@ -229,7 +230,12 @@ export async function fetchAdsViaSearchApi(
 
     options.onProgress?.(allAds.length)
 
-    if (allAds.length >= maxAds || !response.pagination?.next_page_token) {
+    if (allAds.length >= maxAds) {
+      log(`Límite de ${maxAds} anuncios alcanzado`)
+      break
+    }
+    if (!response.pagination?.next_page_token) {
+      log(`Paginación terminada: no hay más páginas (${allAds.length} anuncios obtenidos)`)
       break
     }
 
