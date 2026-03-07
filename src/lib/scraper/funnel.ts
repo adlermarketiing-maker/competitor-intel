@@ -1,5 +1,5 @@
 import { scrapePage } from './puppeteer'
-import { detectPageType, isFunnelUrl, isKnownPaymentPlatform, isSameDomain } from '@/lib/utils/urls'
+import { detectPageType, isFunnelUrl, isKnownPaymentPlatform, isSameDomain, isSocialMediaUrl } from '@/lib/utils/urls'
 import type { ScrapedPageContent } from '@/types/scrape'
 
 const MAX_FUNNEL_DEPTH = 5
@@ -49,14 +49,17 @@ function findNextFunnelUrl(
   currentUrl: string,
   visited: Set<string>
 ): string | null {
-  // Priority 1: explicit funnel URL patterns
-  const funnelLinks = links.filter(
-    (url) => !visited.has(url) && isFunnelUrl(url) && (isSameDomain(url, currentUrl) || isKnownPaymentPlatform(url))
+  // Exclude social media and already-visited links — they are not funnel steps
+  const candidates = links.filter((url) => !visited.has(url) && !isSocialMediaUrl(url))
+
+  // Priority 1: explicit funnel URL patterns on the same domain or a payment platform
+  const funnelLinks = candidates.filter(
+    (url) => isFunnelUrl(url) && (isSameDomain(url, currentUrl) || isKnownPaymentPlatform(url))
   )
   if (funnelLinks.length > 0) return funnelLinks[0]
 
   // Priority 2: payment platform links
-  const paymentLinks = links.filter((url) => !visited.has(url) && isKnownPaymentPlatform(url))
+  const paymentLinks = candidates.filter((url) => isKnownPaymentPlatform(url))
   if (paymentLinks.length > 0) return paymentLinks[0]
 
   return null

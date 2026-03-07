@@ -65,6 +65,24 @@ export async function deleteCompetitor(id: string) {
   return db.competitor.delete({ where: { id } })
 }
 
+/**
+ * Clears all auto-detected fields (fbPageId, facebookUrl, instagramUrl, adLibraryUrl)
+ * and deletes all scraped ads for this competitor, so the next scrape starts fresh.
+ */
+export async function resetCompetitorData(id: string) {
+  await db.ad.deleteMany({ where: { competitorId: id } })
+  return db.competitor.update({
+    where: { id },
+    data: {
+      fbPageId: null,
+      facebookUrl: null,
+      instagramUrl: null,
+      adLibraryUrl: null,
+      lastScrapedAt: null,
+    },
+  })
+}
+
 export async function getDashboardStats() {
   const [competitors, totalAds, activeAds, landingPages] = await Promise.all([
     db.competitor.count(),

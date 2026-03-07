@@ -6,13 +6,10 @@ import { getSettings } from '@/lib/db/settings'
 import { fetchAdsForCompetitor, buildAdLibraryUrl, buildFacebookPageUrl, buildInstagramUrl } from '@/lib/meta/adLibrary'
 import { upsertAd } from '@/lib/db/ads'
 import { upsertLandingPage } from '@/lib/db/landings'
-import { saveFunnelSteps } from '@/lib/db/funnels'
-import { updateScrapeJob, getScrapeJob } from '@/lib/db/jobs'
+import { updateScrapeJob } from '@/lib/db/jobs'
 import { getCompetitor, updateCompetitor } from '@/lib/db/competitors'
 import { scrapePage } from '@/lib/scraper/puppeteer'
-import { detectFunnelChain } from '@/lib/scraper/funnel'
-import { isFunnelEntryUrl, isSameDomain, isSocialMediaUrl } from '@/lib/utils/urls'
-import { randomUUID } from 'crypto'
+import { isSameDomain, isSocialMediaUrl, isLinkInBioService, isSkippableUrl } from '@/lib/utils/urls'
 import type { ScrapeJobData, JobStatus } from '@/types/scrape'
 
 async function emit(jobId: string, type: string, message: string, extra?: object) {
@@ -21,7 +18,6 @@ async function emit(jobId: string, type: string, message: string, extra?: object
 
 /**
  * Returns true if the page name found in Meta Ad Library reasonably matches the competitor name.
- * Prevents saving a wrong page ID when keyword search returns unrelated pages.
  */
 function pageNameMatchesCompetitor(pageName: string, competitorName: string): boolean {
   if (!pageName) return false
@@ -29,16 +25,14 @@ function pageNameMatchesCompetitor(pageName: string, competitorName: string): bo
     s
       .toLowerCase()
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // strip accents
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9\s]/g, '')
       .trim()
   const normPage = normalize(pageName)
   const normComp = normalize(competitorName)
 
-  // Exact or substring match
   if (normPage.includes(normComp) || normComp.includes(normPage)) return true
 
-  // Any significant word (>3 chars) from competitor name appears in page name
   const compWords = normComp.split(/\s+/).filter((w) => w.length > 3)
   return compWords.some((word) => normPage.includes(word))
 }
@@ -65,7 +59,6 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     await emit(jobDbId, 'progress', 'Buscando anuncios en Meta Ad Library...')
 
     const pageIds = competitor.fbPageId ? [competitor.fbPageId] : undefined
-    // Always use the human-readable name for page search (handles like "elartedelaquietud" return wrong pages)
     const searchTerms = competitor.name
 
     let adsRaw: import('@/types/scrape').MetaAdRaw[] = []
@@ -93,8 +86,6 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
 
     // Resolve page ID and profile URLs from first ad if not already set
     if (adsRaw.length > 0 && !competitor.fbPageId) {
-      // Only save the page ID if the found page name actually resembles the competitor name
-      // (prevents saving a wrong page ID when search matches unrelated ads)
       const firstAd = adsRaw[0]
       const pageId = firstAd.page_id
       const foundPageName = firstAd.page_name ?? ''
@@ -103,9 +94,9 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       const updateData: Record<string, string> = {}
       if (pageId && isMatchingPage) {
         updateData.fbPageId = pageId
-        await emit(jobDbId, 'progress', `✓ Page ID detectado: ${pageId} (${foundPageName})`)
+        await emit(jobDbId, 'progress', `Page ID detectado: ${pageId} (${foundPageName})`)
       } else if (pageId && !isMatchingPage) {
-        await emit(jobDbId, 'progress', `⚠ Página encontrada "${foundPageName}" no coincide con "${competitor.name}" — no se guarda el Page ID`)
+        await emit(jobDbId, 'progress', `Pagina encontrada "${foundPageName}" no coincide con "${competitor.name}" — no se guarda el Page ID`)
       }
 
       const pageName = firstAd.page_name || competitor.fbPageName || competitor.name
@@ -135,7 +126,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       }
     }
 
-    await emit(jobDbId, 'progress', `✓ ${completedTasks} anuncios guardados`)
+    await emit(jobDbId, 'progress', `${completedTasks} anuncios guardados`)
   }
 
   // ── Step 1b: Extract real social links from competitor's own website ────────
@@ -153,13 +144,11 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
           const clean = link.split('?')[0].replace(/\/$/, '')
 
           if (!socialUpdates.instagramUrl && !freshCompetitor.instagramUrl && hostname === 'instagram.com') {
-            // Avoid post/reel/story links — only profile URLs
             if (!/\/(p|reel|tv|stories)\//.test(parsed.pathname)) {
               socialUpdates.instagramUrl = clean
             }
           }
           if (!socialUpdates.facebookUrl && !freshCompetitor.facebookUrl && hostname === 'facebook.com') {
-            // Avoid facebook.com/ads or other meta pages
             if (!/\/(ads|business|pages\/create)/.test(parsed.pathname)) {
               socialUpdates.facebookUrl = clean
             }
@@ -172,7 +161,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       if (Object.keys(socialUpdates).length > 0) {
         await updateCompetitor(competitorId, socialUpdates)
         const found = Object.entries(socialUpdates).map(([k, v]) => `${k}: ${v}`).join(', ')
-        await emit(jobDbId, 'progress', `✓ Redes sociales encontradas en web: ${found}`)
+        await emit(jobDbId, 'progress', `Redes sociales encontradas en web: ${found}`)
       } else {
         await emit(jobDbId, 'progress', `Sin redes sociales en la web del competidor`)
       }
@@ -182,133 +171,162 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     }
   }
 
-  // ── Step 2: Scrape landing pages ────────────────────────────────────────────
+  // ── Step 2: Discover and scrape ALL landing pages ─────────────────────────
   if (jobType === 'FULL_SCRAPE' || jobType === 'LANDING_PAGES') {
+    const discoveredUrls = new Map<string, string>() // url -> source label
+
+    // Source A: Landing URLs from ads
     const { db } = await import('@/lib/db/client')
     const ads = await db.ad.findMany({
       where: { competitorId, landingUrl: { not: null } },
       select: { id: true, landingUrl: true },
     })
-
-    const uniqueUrls = new Map<string, string>()
     for (const ad of ads) {
-      if (ad.landingUrl) uniqueUrls.set(ad.landingUrl, ad.id)
-    }
-
-    await emit(jobDbId, 'progress', `Scrapeando ${uniqueUrls.size} landing pages...`)
-
-    let landingsDone = 0
-    for (const [url, adId] of uniqueUrls.entries()) {
-      try {
-        await emit(jobDbId, 'progress', `Scrapeando: ${url}`)
-        const content = await scrapePage(url)
-        const lp = await upsertLandingPage(adId, content)
-
-        // Build funnel chain from this landing
-        if (jobType === 'FULL_SCRAPE' && content.outboundLinks.length > 0) {
-          const funnelId = randomUUID()
-          const funnelChain = await detectFunnelChain(url, async (step) => {
-            await emit(jobDbId, 'progress', `  Funnel paso ${step.url}`)
-          })
-
-          if (funnelChain.length > 1) {
-            await saveFunnelSteps(
-              competitorId,
-              funnelId,
-              funnelChain.map((s) => ({
-                url: s.url,
-                pageType: s.pageType,
-                landingPageId: s.url === lp.url ? lp.id : undefined,
-              }))
-            )
-          }
-        }
-
-        landingsDone++
-        await emit(jobDbId, 'progress', `✓ Landing scrapeada (${landingsDone}/${uniqueUrls.size})`)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        await emit(jobDbId, 'error', `Error scrapeando ${url}: ${msg}`)
+      if (ad.landingUrl && !discoveredUrls.has(ad.landingUrl)) {
+        discoveredUrls.set(ad.landingUrl, 'ad')
       }
-
-      // Pause between pages to be polite
-      await new Promise((r) => setTimeout(r, 1000))
     }
-  }
+    await emit(jobDbId, 'progress', `${discoveredUrls.size} URLs de anuncios`)
 
-  // ── Step 3: Crawl competitor website for additional funnels ─────────────────
-  if (jobType === 'FULL_SCRAPE') {
+    // Source B: Deep crawl of competitor's website
     const latestComp = await getCompetitor(competitorId)
     if (latestComp?.websiteUrl) {
       try {
-        await emit(jobDbId, 'progress', `Rastreando web del competidor para detectar funnels...`)
+        await emit(jobDbId, 'progress', `Rastreando web: ${latestComp.websiteUrl}...`)
         const siteContent = await scrapePage(latestComp.websiteUrl)
 
-        // Collect all already-tracked funnel URLs to avoid duplicates
-        const { db: prismaDb } = await import('@/lib/db/client')
-        const existingSteps = await prismaDb.funnelStep.findMany({
-          where: { competitorId },
-          select: { url: true },
-        })
-        const trackedUrls = new Set(existingSteps.map((s) => s.url))
+        // Save homepage as a landing page too
+        if (!discoveredUrls.has(siteContent.url)) {
+          discoveredUrls.set(siteContent.url, 'homepage')
+        }
 
-        // Find internal links that look like funnel entry points
-        const entryUrls = siteContent.outboundLinks.filter((link) => {
+        // Collect all internal links from homepage
+        const internalLinks: string[] = []
+        for (const link of siteContent.outboundLinks) {
           try {
-            return (
-              isSameDomain(link, latestComp.websiteUrl!) &&
-              isFunnelEntryUrl(link) &&
+            if (
+              isSameDomain(link, latestComp.websiteUrl) &&
               !isSocialMediaUrl(link) &&
-              !trackedUrls.has(link)
-            )
-          } catch { return false }
-        })
+              !isSkippableUrl(link) &&
+              !discoveredUrls.has(link)
+            ) {
+              internalLinks.push(link)
+            }
+          } catch { /* ignore */ }
+        }
 
-        // Deduplicate by path
-        const uniqueEntries = [...new Map(entryUrls.map((u) => {
+        // Deduplicate by pathname
+        const uniqueInternalByPath = [...new Map(internalLinks.map((u) => {
           try { return [new URL(u).pathname, u] } catch { return [u, u] }
         })).values()]
 
-        if (uniqueEntries.length > 0) {
-          await emit(jobDbId, 'progress', `${uniqueEntries.length} posibles funnels encontrados en la web`)
+        await emit(jobDbId, 'progress', `${uniqueInternalByPath.length} links internos encontrados`)
 
-          for (const entryUrl of uniqueEntries.slice(0, 10)) {
-            try {
-              await emit(jobDbId, 'progress', `Analizando funnel: ${entryUrl}`)
-              const funnelChain = await detectFunnelChain(entryUrl, async (step) => {
-                await emit(jobDbId, 'progress', `  Paso: ${step.url}`)
-              })
-
-              if (funnelChain.length >= 1) {
-                const funnelId = randomUUID()
-                // Save landing page for the entry
-                const entryContent = funnelChain[0].content
-                const lp = await upsertLandingPage(null, entryContent)
-
-                await saveFunnelSteps(
-                  competitorId,
-                  funnelId,
-                  funnelChain.map((s) => ({
-                    url: s.url,
-                    pageType: s.pageType,
-                    landingPageId: s.url === lp.url ? lp.id : undefined,
-                  }))
-                )
-                await emit(jobDbId, 'progress', `✓ Funnel detectado (${funnelChain.length} pasos)`)
-              }
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err)
-              await emit(jobDbId, 'error', `Error analizando ${entryUrl}: ${msg}`)
-            }
-            await new Promise((r) => setTimeout(r, 1000))
+        // Crawl internal pages (limit to 30 to avoid excessive scraping)
+        const internalToCrawl = uniqueInternalByPath.slice(0, 30)
+        for (const internalUrl of internalToCrawl) {
+          if (!discoveredUrls.has(internalUrl)) {
+            discoveredUrls.set(internalUrl, 'website')
           }
-        } else {
-          await emit(jobDbId, 'progress', `Sin funnels adicionales en la web`)
+        }
+
+        // Also check for link-in-bio services in outbound links
+        for (const link of siteContent.outboundLinks) {
+          if (isLinkInBioService(link) && !discoveredUrls.has(link)) {
+            discoveredUrls.set(link, 'linkinbio')
+          }
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         await emit(jobDbId, 'error', `Error rastreando web: ${msg}`)
       }
+    }
+
+    // Source C: Link-in-bio and Instagram bio link
+    const compForSocial = await getCompetitor(competitorId)
+    if (compForSocial?.instagramUrl) {
+      try {
+        await emit(jobDbId, 'progress', `Buscando link en bio de Instagram...`)
+        const igContent = await scrapePage(compForSocial.instagramUrl)
+
+        // Instagram pages often have the bio link as an outbound link
+        for (const link of igContent.outboundLinks) {
+          try {
+            if (
+              !isSocialMediaUrl(link) &&
+              !isSkippableUrl(link) &&
+              !discoveredUrls.has(link)
+            ) {
+              // Could be a direct landing or a link-in-bio service
+              if (isLinkInBioService(link)) {
+                discoveredUrls.set(link, 'ig-linkinbio')
+              } else {
+                discoveredUrls.set(link, 'ig-bio')
+              }
+            }
+          } catch { /* ignore */ }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        await emit(jobDbId, 'progress', `No se pudo acceder a Instagram: ${msg}`)
+      }
+    }
+
+    // Source D: If we found link-in-bio pages, crawl them to find more landing pages
+    const linkInBioUrls = [...discoveredUrls.entries()]
+      .filter(([, source]) => source.includes('linkinbio'))
+      .map(([url]) => url)
+
+    for (const bioUrl of linkInBioUrls) {
+      try {
+        await emit(jobDbId, 'progress', `Rastreando link-in-bio: ${bioUrl}...`)
+        const bioContent = await scrapePage(bioUrl)
+
+        for (const link of bioContent.outboundLinks) {
+          try {
+            if (
+              !isSocialMediaUrl(link) &&
+              !isSkippableUrl(link) &&
+              !discoveredUrls.has(link)
+            ) {
+              discoveredUrls.set(link, 'linkinbio-link')
+            }
+          } catch { /* ignore */ }
+        }
+        await new Promise((r) => setTimeout(r, 800))
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        await emit(jobDbId, 'error', `Error en link-in-bio ${bioUrl}: ${msg}`)
+      }
+    }
+
+    // Build a map of landing URL -> ad ID for linking
+    const urlToAdId = new Map<string, string>()
+    for (const ad of ads) {
+      if (ad.landingUrl) urlToAdId.set(ad.landingUrl, ad.id)
+    }
+
+    // Now scrape all discovered URLs
+    await emit(jobDbId, 'progress', `${discoveredUrls.size} landing pages a scrapear...`)
+    let landingsDone = 0
+
+    for (const [url, source] of discoveredUrls.entries()) {
+      try {
+        await emit(jobDbId, 'progress', `Scrapeando (${source}): ${url}`)
+        const content = await scrapePage(url)
+
+        const adId = urlToAdId.get(url) ?? null
+        await upsertLandingPage(competitorId, adId, content)
+
+        landingsDone++
+        await emit(jobDbId, 'progress', `Landing scrapeada (${landingsDone}/${discoveredUrls.size})`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        await emit(jobDbId, 'error', `Error scrapeando ${url}: ${msg}`)
+      }
+
+      // Pause between pages
+      await new Promise((r) => setTimeout(r, 1000))
     }
   }
 

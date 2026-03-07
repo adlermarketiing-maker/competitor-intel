@@ -1,8 +1,13 @@
 import { db } from './client'
 import type { ScrapedPageContent } from '@/types/scrape'
 
-export async function upsertLandingPage(adId: string | null, content: ScrapedPageContent) {
+export async function upsertLandingPage(
+  competitorId: string,
+  adId: string | null,
+  content: ScrapedPageContent
+) {
   const data = {
+    competitorId,
     adId,
     originalUrl: content.originalUrl,
     title: content.title,
@@ -30,8 +35,8 @@ export async function getLandingPagesForCompetitor(competitorId: string) {
   return db.landingPage.findMany({
     where: {
       OR: [
+        { competitorId },
         { ad: { competitorId } },
-        { funnelSteps: { some: { competitorId } } },
       ],
     },
     orderBy: { scrapedAt: 'desc' },

@@ -31,8 +31,9 @@ model Competitor {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  ads        Ad[]
-  scrapeJobs ScrapeJob[]
+  ads          Ad[]
+  landingPages LandingPage[]
+  scrapeJobs   ScrapeJob[]
 
   @@index([fbPageId])
   @@index([name])
@@ -75,9 +76,11 @@ model Ad {
 
 // A scraped landing page
 model LandingPage {
-  id          String @id @default(cuid())
-  adId        String?
-  ad          Ad?    @relation(fields: [adId], references: [id], onDelete: SetNull)
+  id           String      @id @default(cuid())
+  competitorId String?
+  competitor   Competitor? @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  adId         String?
+  ad           Ad?         @relation(fields: [adId], references: [id], onDelete: SetNull)
 
   url            String   @unique
   originalUrl    String
@@ -97,6 +100,7 @@ model LandingPage {
 
   funnelSteps FunnelStep[] @relation("FunnelStepPage")
 
+  @@index([competitorId])
   @@index([adId])
 }
 
