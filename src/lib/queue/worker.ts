@@ -9,7 +9,7 @@ import { upsertLandingPage } from '@/lib/db/landings'
 import { updateScrapeJob } from '@/lib/db/jobs'
 import { getCompetitor, updateCompetitor } from '@/lib/db/competitors'
 import { scrapePage } from '@/lib/scraper/puppeteer'
-import { isSameDomain, isSocialMediaUrl, isLinkInBioService, isSkippableUrl } from '@/lib/utils/urls'
+import { isSameDomain, isSocialMediaUrl, isLinkInBioService } from '@/lib/utils/urls'
 import type { ScrapeJobData, JobStatus } from '@/types/scrape'
 
 async function emit(jobId: string, type: string, message: string, extra?: object) {
@@ -188,7 +188,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     }
     await emit(jobDbId, 'progress', `${discoveredUrls.size} URLs de anuncios`)
 
-    // Source B: Deep crawl of competitor's website
+    // Source B: Deep crawl of competitor's website (2 levels deep)
     const latestComp = await getCompetitor(competitorId)
     if (latestComp?.websiteUrl) {
       try {
@@ -200,37 +200,57 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
           discoveredUrls.set(siteContent.url, 'homepage')
         }
 
-        // Collect all internal links from homepage
-        const internalLinks: string[] = []
-        for (const link of siteContent.outboundLinks) {
-          try {
-            if (
-              isSameDomain(link, latestComp.websiteUrl) &&
-              !isSocialMediaUrl(link) &&
-              !isSkippableUrl(link) &&
-              !discoveredUrls.has(link)
-            ) {
-              internalLinks.push(link)
-            }
-          } catch { /* ignore */ }
-        }
-
-        // Deduplicate by pathname
-        const uniqueInternalByPath = [...new Map(internalLinks.map((u) => {
-          try { return [new URL(u).pathname, u] } catch { return [u, u] }
-        })).values()]
-
-        await emit(jobDbId, 'progress', `${uniqueInternalByPath.length} links internos encontrados`)
-
-        // Crawl internal pages (limit to 30 to avoid excessive scraping)
-        const internalToCrawl = uniqueInternalByPath.slice(0, 30)
-        for (const internalUrl of internalToCrawl) {
-          if (!discoveredUrls.has(internalUrl)) {
-            discoveredUrls.set(internalUrl, 'website')
+        // Helper: collect internal links from a page's outbound links
+        const collectInternalLinks = (outboundLinks: string[], baseUrl: string): string[] => {
+          const links: string[] = []
+          for (const link of outboundLinks) {
+            try {
+              if (isSameDomain(link, baseUrl) && !isSocialMediaUrl(link)) {
+                links.push(link)
+              }
+            } catch { /* ignore */ }
           }
+          // Deduplicate by pathname
+          return [...new Map(links.map((u) => {
+            try { return [new URL(u).pathname, u] } catch { return [u, u] }
+          })).values()]
         }
 
-        // Also check for link-in-bio services in outbound links
+        // Level 1: internal links from homepage
+        const level1Links = collectInternalLinks(siteContent.outboundLinks, latestComp.websiteUrl)
+        await emit(jobDbId, 'progress', `${level1Links.length} links internos en homepage`)
+
+        for (const link of level1Links) {
+          if (!discoveredUrls.has(link)) discoveredUrls.set(link, 'website')
+        }
+
+        // Level 2: crawl each level-1 page to find deeper links
+        const level1ToCrawl = level1Links.slice(0, 20) // limit level-1 crawl
+        let level2Count = 0
+        for (const subUrl of level1ToCrawl) {
+          try {
+            const subContent = await scrapePage(subUrl)
+            const level2Links = collectInternalLinks(subContent.outboundLinks, latestComp.websiteUrl)
+            for (const link of level2Links) {
+              if (!discoveredUrls.has(link)) {
+                discoveredUrls.set(link, 'website-deep')
+                level2Count++
+              }
+            }
+            // Check for link-in-bio in subpages too
+            for (const link of subContent.outboundLinks) {
+              if (isLinkInBioService(link) && !discoveredUrls.has(link)) {
+                discoveredUrls.set(link, 'linkinbio')
+              }
+            }
+            await new Promise((r) => setTimeout(r, 800))
+          } catch { /* ignore errors on individual subpages */ }
+        }
+        if (level2Count > 0) {
+          await emit(jobDbId, 'progress', `${level2Count} links adicionales en subpáginas`)
+        }
+
+        // Check for link-in-bio services in homepage outbound links
         for (const link of siteContent.outboundLinks) {
           if (isLinkInBioService(link) && !discoveredUrls.has(link)) {
             discoveredUrls.set(link, 'linkinbio')
@@ -254,10 +274,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
           try {
             if (
               !isSocialMediaUrl(link) &&
-              !isSkippableUrl(link) &&
               !discoveredUrls.has(link)
             ) {
-              // Could be a direct landing or a link-in-bio service
               if (isLinkInBioService(link)) {
                 discoveredUrls.set(link, 'ig-linkinbio')
               } else {
@@ -286,7 +304,6 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
           try {
             if (
               !isSocialMediaUrl(link) &&
-              !isSkippableUrl(link) &&
               !discoveredUrls.has(link)
             ) {
               discoveredUrls.set(link, 'linkinbio-link')
