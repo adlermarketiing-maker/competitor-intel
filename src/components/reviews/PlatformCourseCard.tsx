@@ -28,6 +28,8 @@ const PLATFORM_COLORS: Record<string, string> = {
   hotmart: 'bg-orange-100 text-orange-700',
   skool: 'bg-green-100 text-green-700',
   pylon: 'bg-blue-100 text-blue-700',
+  trustpilot: 'bg-emerald-100 text-emerald-700',
+  amazon: 'bg-amber-100 text-amber-700',
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -35,6 +37,8 @@ const PLATFORM_LABELS: Record<string, string> = {
   hotmart: 'Hotmart',
   skool: 'Skool',
   pylon: 'Pylon',
+  trustpilot: 'TrustPilot',
+  amazon: 'Amazon',
 }
 
 export default function PlatformCourseCard({ course }: { course: Course }) {

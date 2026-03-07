@@ -6,14 +6,19 @@ import Link from 'next/link'
 import AdCard from '@/components/ads/AdCard'
 import LandingPageCard from '@/components/landings/LandingPageCard'
 import ScrapeProgressBanner from '@/components/competitors/ScrapeProgressBanner'
+import MarketAnalysisCard from '@/components/market/MarketAnalysisCard'
 import type { Ad, Competitor, LandingPage } from '@/types/competitor'
 import type { ScrapeJob } from '@/types/scrape'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MarketAnalysis = any
 
 interface CompetitorData {
   competitor: Competitor & { _count?: { ads: number } }
   ads: Ad[]
   landingPages: LandingPage[]
   latestJob: ScrapeJob | null
+  marketAnalysis: MarketAnalysis | null
 }
 
 type AdFilter = 'all' | 'active' | 'inactive'
@@ -110,7 +115,7 @@ export default function CompetitorProfilePage() {
     )
   }
 
-  const { competitor, ads, landingPages, latestJob } = data
+  const { competitor, ads, landingPages, latestJob, marketAnalysis } = data
   const activeAds = ads.filter((a) => a.isActive)
   const inactiveAds = ads.filter((a) => !a.isActive)
   const visibleAds = adFilter === 'active' ? activeAds : adFilter === 'inactive' ? inactiveAds : ads
@@ -290,6 +295,30 @@ export default function CompetitorProfilePage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {landingPages.map((page) => <LandingPageCard key={page.id} page={page} />)}
+            </div>
+          )}
+        </section>
+
+        {/* ── MARKET ANALYSIS ── */}
+        <section>
+          <div className="flex items-center gap-3 mb-5">
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Análisis de Mercado</h2>
+            <div className="flex-1 h-px bg-slate-100" />
+          </div>
+
+          {marketAnalysis ? (
+            <MarketAnalysisCard analysis={marketAnalysis} />
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-100 p-10 text-center">
+              <div className="w-12 h-12 bg-violet-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-slate-700 mb-1">Sin análisis de mercado</p>
+              <p className="text-xs text-slate-400">
+                Lanza un scrape completo para analizar las reseñas de plataformas con IA
+              </p>
             </div>
           )}
         </section>

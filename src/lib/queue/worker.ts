@@ -375,6 +375,113 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     }
   }
 
+  // ── Step 3: Scrape reviews from platforms and analyze with Claude ─────────
+  if (jobType === 'FULL_SCRAPE') {
+    await emit(jobDbId, 'progress', 'Buscando reseñas en plataformas...')
+    const { db: prisma } = await import('@/lib/db/client')
+
+    const allReviews: Array<{ text: string; rating?: number | null; platform?: string }> = []
+    const usedPlatforms: string[] = []
+    const searchTerm = competitor.name
+
+    const platformScrapers = [
+      { name: 'udemy', search: () => import('@/lib/scraper/platforms/udemy').then((m) => m.searchUdemy(searchTerm, 5)), scrapeComments: (url: string) => import('@/lib/scraper/platforms/udemy').then((m) => m.scrapeUdemyReviews(url, 15)) },
+      { name: 'hotmart', search: () => import('@/lib/scraper/platforms/hotmart').then((m) => m.searchHotmart(searchTerm, 5)), scrapeComments: (url: string) => import('@/lib/scraper/platforms/hotmart').then((m) => m.scrapeHotmartComments(url, 15)) },
+      { name: 'trustpilot', search: () => import('@/lib/scraper/platforms/trustpilot').then((m) => m.searchTrustpilot(searchTerm, 5)), scrapeComments: (url: string) => import('@/lib/scraper/platforms/trustpilot').then((m) => m.scrapeTrustpilotReviews(url, 15)) },
+      { name: 'amazon', search: () => import('@/lib/scraper/platforms/amazon').then((m) => m.searchAmazon(searchTerm, 5)), scrapeComments: (url: string) => import('@/lib/scraper/platforms/amazon').then((m) => m.scrapeAmazonReviews(url, 15)) },
+    ]
+
+    for (const platform of platformScrapers) {
+      try {
+        await emit(jobDbId, 'progress', `Buscando en ${platform.name}...`)
+        const courses = await platform.search()
+        if (courses.length === 0) continue
+
+        await emit(jobDbId, 'progress', `${courses.length} resultados en ${platform.name}. Extrayendo reseñas...`)
+        usedPlatforms.push(platform.name)
+
+        for (const course of courses) {
+          if (!course.title || !course.url) continue
+          try {
+            // Save course linked to competitor
+            const existing = await prisma.platformCourse.findUnique({ where: { url: course.url } })
+            if (!existing) {
+              await prisma.platformCourse.create({
+                data: {
+                  platform: platform.name,
+                  title: course.title,
+                  url: course.url,
+                  authorName: course.authorName,
+                  price: course.price,
+                  rating: course.rating,
+                  reviewCount: course.reviewCount,
+                  description: course.description,
+                  competitorId,
+                },
+              })
+            }
+
+            const comments = await platform.scrapeComments(course.url)
+            for (const c of comments) {
+              if (c.text.length > 10) {
+                allReviews.push({ text: c.text, rating: c.rating, platform: platform.name })
+              }
+            }
+
+            if (comments.length > 0) {
+              const courseRecord = existing ?? await prisma.platformCourse.findUnique({ where: { url: course.url } })
+              if (courseRecord) {
+                await prisma.platformComment.createMany({
+                  data: comments.map((c) => ({
+                    courseId: courseRecord.id,
+                    author: c.author,
+                    text: c.text,
+                    rating: c.rating,
+                    date: c.date,
+                  })),
+                  skipDuplicates: true,
+                })
+              }
+            }
+          } catch {
+            // Skip individual course errors
+          }
+          await new Promise((r) => setTimeout(r, 1000))
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        await emit(jobDbId, 'progress', `Error en ${platform.name}: ${msg}`)
+      }
+    }
+
+    await emit(jobDbId, 'progress', `${allReviews.length} reseñas recopiladas de ${usedPlatforms.join(', ') || 'ninguna plataforma'}`)
+
+    if (allReviews.length >= 3 && process.env.ANTHROPIC_API_KEY) {
+      try {
+        await emit(jobDbId, 'progress', 'Analizando reseñas con IA...')
+        const { analyzeReviews } = await import('@/lib/analysis/market')
+        const { saveMarketAnalysis } = await import('@/lib/db/market')
+
+        const analysis = await analyzeReviews(allReviews, { competitorName: competitor.name })
+        await saveMarketAnalysis({
+          ...analysis,
+          competitorId,
+          totalReviews: allReviews.length,
+          platforms: usedPlatforms,
+        })
+
+        await emit(jobDbId, 'progress', `Análisis de mercado completado: ${analysis.objections.length} objeciones, ${analysis.benefits.length} beneficios, ${analysis.phrases.length} frases`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        await emit(jobDbId, 'error', `Error en análisis IA: ${msg}`)
+      }
+    } else if (allReviews.length < 3) {
+      await emit(jobDbId, 'progress', 'Pocas reseñas para análisis (mínimo 3)')
+    } else if (!process.env.ANTHROPIC_API_KEY) {
+      await emit(jobDbId, 'progress', 'ANTHROPIC_API_KEY no configurada — análisis omitido')
+    }
+  }
+
   // ── Finalize ────────────────────────────────────────────────────────────────
   await updateCompetitor(competitorId, { lastScrapedAt: new Date() })
   const finalStatus: JobStatus = failedTasks === 0 ? 'COMPLETE' : 'PARTIAL'

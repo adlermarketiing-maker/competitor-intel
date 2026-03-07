@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import PlatformCourseCard from '@/components/reviews/PlatformCourseCard'
+import MarketAnalysisCard from '@/components/market/MarketAnalysisCard'
 
 const PLATFORM_OPTIONS = [
   { value: 'udemy', label: 'Udemy' },
   { value: 'hotmart', label: 'Hotmart' },
+  { value: 'trustpilot', label: 'TrustPilot' },
+  { value: 'amazon', label: 'Amazon' },
   { value: 'skool', label: 'Skool' },
   { value: 'pylon', label: 'Pylon' },
 ]
@@ -32,19 +35,34 @@ interface Course {
   search: { keywords: string } | null
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MarketAnalysis = any
+
 export default function ReviewsPage() {
   const [keywords, setKeywords] = useState('')
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['udemy', 'hotmart', 'skool', 'pylon'])
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['udemy', 'hotmart', 'trustpilot', 'amazon', 'skool', 'pylon'])
   const [loading, setLoading] = useState(false)
   const [courses, setCourses] = useState<Course[]>([])
   const [fetchingCourses, setFetchingCourses] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filterPlatform, setFilterPlatform] = useState('')
 
+  // Market analysis state
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analyses, setAnalyses] = useState<MarketAnalysis[]>([])
+  const [activeAnalysis, setActiveAnalysis] = useState<MarketAnalysis | null>(null)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
+
   useEffect(() => {
-    fetch('/api/platforms')
-      .then((r) => r.json())
-      .then((data) => { setCourses(data); setFetchingCourses(false) })
+    Promise.all([
+      fetch('/api/platforms').then((r) => r.json()),
+      fetch('/api/market-analysis').then((r) => r.json()),
+    ])
+      .then(([coursesData, analysesData]) => {
+        setCourses(coursesData)
+        if (Array.isArray(analysesData)) setAnalyses(analysesData)
+        setFetchingCourses(false)
+      })
       .catch(() => setFetchingCourses(false))
   }, [])
 
@@ -69,7 +87,6 @@ export default function ReviewsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      // Refresh course list
       const refreshed = await fetch('/api/platforms').then((r) => r.json())
       setCourses(refreshed)
     } catch (err) {
@@ -79,6 +96,31 @@ export default function ReviewsPage() {
     }
   }
 
+  const handleAnalyze = async () => {
+    if (!keywords.trim()) return
+    setAnalyzing(true)
+    setAnalysisError(null)
+    setActiveAnalysis(null)
+
+    try {
+      const res = await fetch('/api/market-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keywords: keywords.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setActiveAnalysis(data)
+      setAnalyses((prev) => [data, ...prev])
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : 'Error al analizar')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const totalComments = courses.reduce((sum, c) => sum + c.comments.length, 0)
+
   const displayedCourses = filterPlatform
     ? courses.filter((c) => c.platform === filterPlatform)
     : courses
@@ -87,9 +129,9 @@ export default function ReviewsPage() {
     <div className="p-8 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Reseñas de Plataformas</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Reseñas y Lenguaje del Mercado</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Extrae comentarios y reseñas de cursos similares en Udemy, Hotmart, Skool y Pylon
+          Extrae reseñas de plataformas y analiza el lenguaje del mercado con IA
         </p>
       </div>
 
@@ -130,32 +172,63 @@ export default function ReviewsPage() {
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={loading || !keywords.trim() || selectedPlatforms.length === 0}
-          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors"
-        >
-          {loading ? (
-            <>
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Buscando reseñas... (puede tardar varios minutos)
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              Extraer reseñas
-            </>
-          )}
-        </button>
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={loading || !keywords.trim() || selectedPlatforms.length === 0}
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors"
+          >
+            {loading ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Buscando reseñas...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                Extraer reseñas
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleAnalyze}
+            disabled={analyzing || !keywords.trim() || totalComments < 3}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors"
+          >
+            {analyzing ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Analizando con IA...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Analizar mercado
+              </>
+            )}
+          </button>
+        </div>
 
         {loading && (
           <p className="text-xs text-slate-400 mt-3">
             Abriendo navegador y recorriendo las plataformas seleccionadas. Esto puede tomar 3-5 minutos...
+          </p>
+        )}
+        {analyzing && (
+          <p className="text-xs text-slate-400 mt-3">
+            Enviando {totalComments} reseñas a Claude para análisis de mercado...
           </p>
         )}
       </form>
@@ -163,6 +236,51 @@ export default function ReviewsPage() {
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl px-5 py-4">
           <p className="text-sm text-red-700 font-medium">{error}</p>
+        </div>
+      )}
+
+      {analysisError && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl px-5 py-4">
+          <p className="text-sm text-red-700 font-medium">{analysisError}</p>
+        </div>
+      )}
+
+      {/* Active analysis result */}
+      {activeAnalysis && (
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Análisis de Mercado</h2>
+            <div className="flex-1 h-px bg-slate-100" />
+          </div>
+          <MarketAnalysisCard analysis={activeAnalysis} />
+        </div>
+      )}
+
+      {/* Previous analyses */}
+      {!activeAnalysis && analyses.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Análisis Anteriores</h2>
+            <div className="flex-1 h-px bg-slate-100" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {analyses.map((a: MarketAnalysis) => (
+              <button
+                key={a.id}
+                onClick={() => setActiveAnalysis(a)}
+                className="bg-white rounded-xl border border-slate-100 p-4 text-left hover:border-violet-200 transition-colors"
+              >
+                <p className="text-sm font-semibold text-slate-800 mb-1">
+                  {a.searchKeywords || a.competitor?.name || 'Análisis'}
+                </p>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span>{a.totalReviews} reseñas</span>
+                  <span>·</span>
+                  <span>{new Date(a.analyzedAt).toLocaleDateString('es-ES')}</span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -185,7 +303,7 @@ export default function ReviewsPage() {
             ))}
           </div>
           <span className="text-xs text-slate-400">
-            {displayedCourses.length} cursos
+            {displayedCourses.length} cursos · {totalComments} reseñas
           </span>
         </div>
       )}

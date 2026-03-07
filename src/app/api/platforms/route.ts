@@ -102,6 +102,14 @@ async function scrapePlatform(
       const { searchPylon, scrapePylonComments } = await import('@/lib/scraper/platforms/pylon')
       courses = await searchPylon(keywords, 8)
       scrapeComments = scrapePylonComments
+    } else if (platform === 'trustpilot') {
+      const { searchTrustpilot, scrapeTrustpilotReviews } = await import('@/lib/scraper/platforms/trustpilot')
+      courses = await searchTrustpilot(keywords, 8)
+      scrapeComments = scrapeTrustpilotReviews
+    } else if (platform === 'amazon') {
+      const { searchAmazon, scrapeAmazonReviews } = await import('@/lib/scraper/platforms/amazon')
+      courses = await searchAmazon(keywords, 8)
+      scrapeComments = scrapeAmazonReviews
     } else {
       return []
     }

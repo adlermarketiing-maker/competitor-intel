@@ -44,8 +44,8 @@ export async function scrapePage(url: string): Promise<ScrapedPageContent> {
     await page.setViewport({ width: 1280, height: 800 })
 
     const response = await page.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
     })
 
     httpStatus = response?.status() ?? 200
