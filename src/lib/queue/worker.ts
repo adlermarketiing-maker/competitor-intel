@@ -64,7 +64,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     await emit(jobDbId, 'progress', 'Buscando anuncios en Meta Ad Library...')
 
     const pageIds = competitor.fbPageId ? [competitor.fbPageId] : undefined
-    const searchTerms = competitor.fbPageName || competitor.searchTerm || competitor.name
+    // Always use the human-readable name for page search (handles like "elartedelaquietud" return wrong pages)
+    const searchTerms = competitor.name
 
     let adsRaw: import('@/types/scrape').MetaAdRaw[] = []
     try {

@@ -104,8 +104,28 @@ export async function findPageId(
       return null
     }
 
-    // Pick the best match — first result is usually the most relevant
-    const page = data.page_results[0]
+    // Pick the best match by name similarity, preferring pages with more likes
+    const normalize = (s: string) =>
+      s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '').trim()
+    const normSearch = normalize(searchName)
+
+    // Score each result: name similarity + likes as tiebreaker
+    const scored = data.page_results.map((p) => {
+      const normName = normalize(p.name)
+      const exact = normName === normSearch ? 10 : 0
+      const includes = normName.includes(normSearch) || normSearch.includes(normName) ? 5 : 0
+      const wordMatch = normSearch.split(/\s+/).filter((w) => w.length > 2 && normName.includes(w)).length
+      return { page: p, score: exact + includes + wordMatch + Math.min(Math.log10((p.likes ?? 0) + 1), 3) }
+    })
+    scored.sort((a, b) => b.score - a.score)
+
+    const best = scored[0]
+    if (best.score < 1) {
+      log(`No se encontró página que coincida con "${searchName}" (mejor candidato: "${best.page.name}" score=${best.score.toFixed(1)})`)
+      return null
+    }
+
+    const page = best.page
     log(`✓ Página encontrada: "${page.name}" (ID: ${page.page_id}, ${page.likes ?? 0} likes)`)
     return { pageId: page.page_id, pageName: page.name }
   } catch (err) {
