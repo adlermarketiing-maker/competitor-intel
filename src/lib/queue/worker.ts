@@ -344,6 +344,10 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       if (ad.landingUrl) urlToAdId.set(normalizeUrl(ad.landingUrl), ad.id)
     }
 
+    // Delete old landing pages for this competitor before saving new ones
+    await db.landingPage.deleteMany({ where: { competitorId } })
+    await emit(jobDbId, 'progress', `Limpiando landings antiguas...`)
+
     // Now scrape all discovered URLs
     await emit(jobDbId, 'progress', `${discoveredUrls.size} landing pages a scrapear...`)
     let landingsDone = 0
@@ -352,6 +356,9 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       try {
         await emit(jobDbId, 'progress', `Scrapeando (${source}): ${url}`)
         const content = await scrapePage(url)
+
+        // Normalize URL from Puppeteer (may add # fragments or trailing slashes)
+        content.url = normalizeUrl(content.url)
 
         const adId = urlToAdId.get(url) ?? null
         await upsertLandingPage(competitorId, adId, content)
