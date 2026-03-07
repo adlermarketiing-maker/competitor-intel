@@ -51,7 +51,7 @@ RUN npm ci
 COPY prisma ./prisma/
 RUN npx prisma generate
 
-# Build the app
+# Copy source and build
 COPY . .
 RUN npm run build
 
@@ -59,4 +59,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["npm", "start"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && npm start"]
