@@ -27,6 +27,13 @@ export async function getMetaToken(): Promise<string | null> {
   }
   const settings = await getSettings()
   if (!settings?.metaToken) return null
+
+  // Check if token has expired
+  if (settings.tokenExpiry && settings.tokenExpiry.getTime() < Date.now()) {
+    console.warn('[Settings] Meta token has expired (expired at', settings.tokenExpiry.toISOString(), ')')
+    return null
+  }
+
   try {
     return decrypt(settings.metaToken)
   } catch (err) {

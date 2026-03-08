@@ -248,6 +248,7 @@ model PlatformCourse {
   @@index([platform])
   @@index([searchId])
   @@index([competitorId])
+  @@index([competitorId, platform])
 }
 
 // A comment/review extracted from a platform course

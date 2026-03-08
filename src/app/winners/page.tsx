@@ -20,21 +20,23 @@ export default function WinnersPage() {
   const [groups, setGroups] = useState<WinnerGroup[]>([])
   const [allWinners, setAllWinners] = useState<Array<Ad & { competitor?: { id: string; name: string } }>>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<ViewMode>('ranking')
 
   useEffect(() => {
     setLoading(true)
+    setError(null)
     const cParam = selectedClientId ? `&clientId=${selectedClientId}` : ''
     if (view === 'ranking') {
       fetch(`/api/ads/winners?groupBy=competitor${cParam}`)
-        .then((r) => r.json())
+        .then((r) => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json() })
         .then((data) => { setGroups(data); setLoading(false) })
-        .catch(() => setLoading(false))
+        .catch((err) => { setError(err.message); setLoading(false) })
     } else {
       fetch(`/api/ads/winners?limit=100${cParam}`)
-        .then((r) => r.json())
+        .then((r) => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json() })
         .then((data) => { setAllWinners(data); setLoading(false) })
-        .catch(() => setLoading(false))
+        .catch((err) => { setError(err.message); setLoading(false) })
     }
   }, [view, selectedClientId])
 
@@ -69,7 +71,9 @@ export default function WinnersPage() {
         </div>
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
+      ) : loading ? (
         <div className="flex justify-center py-16">
           <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
         </div>

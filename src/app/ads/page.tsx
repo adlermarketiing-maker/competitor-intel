@@ -30,6 +30,7 @@ export default function AdsPage() {
   const { selectedClientId } = useClient()
   const [data, setData] = useState<AdsResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([])
   const [competitorId, setCompetitorId] = useState('')
   const [adStatus, setAdStatus] = useState<StatusFilter>('')
@@ -56,6 +57,7 @@ export default function AdsPage() {
 
   useEffect(() => {
     setLoading(true)
+    setError(null)
     const params = new URLSearchParams({ page: String(page), limit: '24' })
     if (selectedClientId) params.set('clientId', selectedClientId)
     if (adStatus) params.set('adStatus', adStatus)
@@ -71,9 +73,9 @@ export default function AdsPage() {
     if (minScore) params.set('minScore', minScore)
 
     fetch(`/api/ads?${params}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json() })
       .then((d) => { setData(d); setLoading(false) })
-      .catch(() => setLoading(false))
+      .catch((err) => { setError(err.message); setLoading(false) })
   }, [adStatus, isActiveFilter, page, competitorId, sortBy, minDays, maxDays, hookType, marketingAngle, creativeFormat, awarenessLevel, minScore, selectedClientId])
 
   const hasActiveFilters = competitorId !== '' || adStatus !== '' || isActiveFilter !== '' || sortBy !== '' || minDays !== '' || maxDays !== '' || hookType !== '' || marketingAngle !== '' || creativeFormat !== '' || awarenessLevel !== '' || minScore !== ''
@@ -279,7 +281,9 @@ export default function AdsPage() {
         )}
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm mb-4">{error}</div>
+      ) : loading ? (
         <div className="flex justify-center py-16">
           <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
         </div>

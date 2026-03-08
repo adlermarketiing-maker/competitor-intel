@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const awarenessLevel = searchParams.get('awarenessLevel') || undefined
     const copyLength = searchParams.get('copyLength') || undefined
     const minScore = searchParams.get('minScore') ? parseInt(searchParams.get('minScore')!) || undefined : undefined
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1)
+    const page = Math.max(1, Math.min(500, parseInt(searchParams.get('page') || '1') || 1))
     const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '24') || 24))
 
     const result = await listAds({ competitorId, clientId, isActive, adStatus, minDays, maxDays, sortBy, platform, hookType, marketingAngle, creativeFormat, awarenessLevel, copyLength, minScore, page, limit })
