@@ -112,9 +112,24 @@ export default function DiscoverPage() {
         </div>
 
         <div className="mb-5">
-          <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
-            Países a buscar
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Países a buscar
+            </label>
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedCountries(
+                  selectedCountries.length === COUNTRY_OPTIONS.length
+                    ? []
+                    : COUNTRY_OPTIONS.map((c) => c.code)
+                )
+              }
+              className="text-xs font-medium text-violet-600 hover:text-violet-500 transition-colors"
+            >
+              {selectedCountries.length === COUNTRY_OPTIONS.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {COUNTRY_OPTIONS.map(({ code, label }) => (
               <button
