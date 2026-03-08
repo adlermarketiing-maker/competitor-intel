@@ -54,8 +54,24 @@ export async function updateCompetitor(
     websiteUrl: string
     facebookUrl: string
     instagramUrl: string
+    youtubeUrl: string
     adLibraryUrl: string
+    semrushUrl: string
+    competitorType: string
     lastScrapedAt: Date
+    // Funnel Hacking fields
+    avatar: string | null
+    funnelUrl: string | null
+    promesa: string | null
+    promesaOferta: string | null
+    oferta: string | null
+    bonos: string | null
+    garantia: string | null
+    pruebasAutoridad: string | null
+    precio: string | null
+    embudoStructure: string | null
+    funnelNotes: string | null
+    funnelAnalyzedAt: Date | null
   }>
 ) {
   return db.competitor.update({ where: { id }, data })

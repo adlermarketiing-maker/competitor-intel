@@ -7,10 +7,26 @@ export interface Competitor {
   searchTerm: string | null
   facebookUrl: string | null
   instagramUrl: string | null
+  youtubeUrl: string | null
   adLibraryUrl: string | null
+  semrushUrl: string | null
+  competitorType: string | null
   lastScrapedAt: Date | null
   createdAt: Date
   updatedAt: Date
+  // Funnel Hacking fields
+  avatar: string | null
+  funnelUrl: string | null
+  promesa: string | null
+  promesaOferta: string | null
+  oferta: string | null
+  bonos: string | null
+  garantia: string | null
+  pruebasAutoridad: string | null
+  precio: string | null
+  embudoStructure: string | null
+  funnelNotes: string | null
+  funnelAnalyzedAt: Date | null
   _count?: {
     ads: number
   }

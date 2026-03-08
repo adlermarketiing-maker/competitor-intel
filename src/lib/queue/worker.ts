@@ -467,6 +467,46 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     }
   }
 
+  // ── Step 3: AI Funnel Hacking analysis ──────────────────────────────────────
+  if (jobType === 'FULL_SCRAPE' && process.env.ANTHROPIC_API_KEY) {
+    try {
+      const { db: prisma } = await import('@/lib/db/client')
+      const landingPages = await prisma.landingPage.findMany({
+        where: { competitorId },
+        select: { url: true, title: true, h1Texts: true, h2Texts: true, ctaTexts: true, prices: true, bodyText: true },
+        orderBy: { scrapedAt: 'desc' },
+        take: 15,
+      })
+
+      if (landingPages.length > 0) {
+        await emit(jobDbId, 'progress', `Analizando funnel con IA (${landingPages.length} páginas)...`)
+        const { analyzeFunnel } = await import('@/lib/analysis/funnelHacking')
+        const analysis = await analyzeFunnel({ competitorName: competitor.name, pages: landingPages })
+
+        await updateCompetitor(competitorId, {
+          ...analysis,
+          funnelAnalyzedAt: new Date(),
+        })
+
+        // Auto-generate Semrush URL from website domain
+        const latestComp = await getCompetitor(competitorId)
+        if (latestComp?.websiteUrl && !latestComp.semrushUrl) {
+          try {
+            const domain = new URL(latestComp.websiteUrl).hostname.replace(/^www\./, '')
+            await updateCompetitor(competitorId, {
+              semrushUrl: `https://www.semrush.com/analytics/overview/?q=${encodeURIComponent(domain)}`,
+            })
+          } catch { /* ignore URL parse errors */ }
+        }
+
+        await emit(jobDbId, 'progress', 'Funnel hacking: análisis IA completado')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      await emit(jobDbId, 'progress', `Error en análisis de funnel: ${msg}`)
+    }
+  }
+
   // ── Finalize ────────────────────────────────────────────────────────────────
   await updateCompetitor(competitorId, { lastScrapedAt: new Date() })
   const finalStatus: JobStatus = failedTasks === 0 ? 'COMPLETE' : 'PARTIAL'

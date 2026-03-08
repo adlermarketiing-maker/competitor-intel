@@ -18,18 +18,35 @@ model Settings {
 
 // A competitor being monitored
 model Competitor {
-  id            String    @id @default(cuid())
-  name          String
-  fbPageName    String?
-  fbPageId      String?
-  websiteUrl    String?
-  searchTerm    String?
-  facebookUrl   String?
-  instagramUrl  String?
-  adLibraryUrl  String?
-  lastScrapedAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  name            String
+  fbPageName      String?
+  fbPageId        String?
+  websiteUrl      String?
+  searchTerm      String?
+  facebookUrl     String?
+  instagramUrl    String?
+  youtubeUrl      String?
+  adLibraryUrl    String?
+  semrushUrl      String?
+  competitorType  String?   // 'directo' | 'indirecto'
+  lastScrapedAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Funnel Hacking fields (auto-filled by AI or edited manually)
+  avatar           String?  @db.Text  // Target avatar: who, how identified, hook
+  funnelUrl        String?            // Main sales funnel URL
+  promesa          String?  @db.Text  // Lead magnet / free event promise
+  promesaOferta    String?  @db.Text  // Offer promise: results, problems solved
+  oferta           String?  @db.Text  // Offer name, value stack, deliverables
+  bonos            String?  @db.Text  // Bonuses and why
+  garantia         String?  @db.Text  // Product guarantee
+  pruebasAutoridad String?  @db.Text  // Testimonials, awards, media
+  precio           String?  @db.Text  // Price range (main offer + value ladder)
+  embudoStructure  String?  @db.Text  // Detected funnel structure (e.g. ad > optin > vsl > checkout)
+  funnelNotes      String?  @db.Text  // General notes
+  funnelAnalyzedAt DateTime?
 
   ads              Ad[]
   landingPages     LandingPage[]
@@ -40,6 +57,7 @@ model Competitor {
 
   @@index([fbPageId])
   @@index([name])
+  @@index([competitorType])
 }
 
 // An ad from the Meta Ad Library

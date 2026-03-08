@@ -6,6 +6,7 @@ import Link from 'next/link'
 import AdCard from '@/components/ads/AdCard'
 import LandingPageCard from '@/components/landings/LandingPageCard'
 import ScrapeProgressBanner from '@/components/competitors/ScrapeProgressBanner'
+import FunnelHackingSection from '@/components/competitors/FunnelHackingSection'
 import type { Ad, Competitor, LandingPage } from '@/types/competitor'
 import type { ScrapeJob } from '@/types/scrape'
 
@@ -185,6 +186,12 @@ export default function CompetitorProfilePage() {
                   Instagram ↗
                 </a>
               )}
+              {competitor.youtubeUrl && (
+                <a href={competitor.youtubeUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-red-600 hover:underline">
+                  YouTube ↗
+                </a>
+              )}
               {competitor.adLibraryUrl && (
                 <a href={competitor.adLibraryUrl} target="_blank" rel="noopener noreferrer"
                   className="text-xs text-slate-500 hover:underline font-medium">
@@ -338,6 +345,9 @@ export default function CompetitorProfilePage() {
             </div>
           )}
         </section>
+
+        {/* ── FUNNEL HACKING ── */}
+        <FunnelHackingSection competitor={competitor} onUpdate={loadData} />
 
       </div>
     </div>

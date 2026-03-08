@@ -13,6 +13,7 @@ const PLATFORM_OPTIONS = [
   { value: 'pylon', label: 'Pylon' },
   { value: 'youtube', label: 'YouTube' },
   { value: 'reddit', label: 'Reddit' },
+  { value: 'clickbank', label: 'Clickbank' },
 ]
 
 interface Comment {
