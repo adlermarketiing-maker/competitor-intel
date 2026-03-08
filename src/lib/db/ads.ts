@@ -13,6 +13,13 @@ function daysBetween(a: Date, b: Date): number {
   return Math.max(0, Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24)))
 }
 
+/** Calculate daysActive using Meta's own dates (startDate/stopDate) */
+function computeDaysActive(startDate: Date | null, stopDate: Date | null): number {
+  if (!startDate) return 0
+  const end = stopDate ?? new Date()
+  return daysBetween(startDate, end)
+}
+
 export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
   const imageUrls = (raw.ad_creative_images || [])
     .map((img) => img.resized_image_url || img.original_image_url)
@@ -28,15 +35,9 @@ export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
     .filter(Boolean) as string[]
 
   const now = new Date()
-
-  // Check if ad already exists to preserve firstSeenAt
-  const existing = await db.ad.findUnique({
-    where: { metaAdId: raw.id },
-    select: { firstSeenAt: true },
-  })
-
-  const firstSeenAt = existing?.firstSeenAt ?? now
-  const daysActive = daysBetween(firstSeenAt, now)
+  const startDate = raw.ad_delivery_start_time ? new Date(raw.ad_delivery_start_time) : null
+  const stopDate = raw.ad_delivery_stop_time ? new Date(raw.ad_delivery_stop_time) : null
+  const daysActive = computeDaysActive(startDate, stopDate)
   const adStatus = computeAdStatus(daysActive)
 
   const data = {
@@ -53,8 +54,8 @@ export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
     pageId: raw.page_id ?? null,
     pageName: raw.page_name ?? null,
     isActive: !raw.ad_delivery_stop_time,
-    startDate: raw.ad_delivery_start_time ? new Date(raw.ad_delivery_start_time) : null,
-    stopDate: raw.ad_delivery_stop_time ? new Date(raw.ad_delivery_stop_time) : null,
+    startDate,
+    stopDate,
     lastSeenAt: now,
     daysActive,
     adStatus,
@@ -84,13 +85,13 @@ export async function markEliminatedAds(competitorId: string, scrapedMetaAdIds: 
         ? { metaAdId: { notIn: scrapedMetaAdIds } }
         : {}),
     },
-    select: { id: true, metaAdId: true, firstSeenAt: true, lastSeenAt: true, adStatus: true, daysActive: true },
+    select: { id: true, metaAdId: true, startDate: true, stopDate: true, adStatus: true, daysActive: true },
   })
 
   const retiredWinners: Array<{ metaAdId: string; daysActive: number }> = []
 
   for (const ad of missingAds) {
-    const daysActive = daysBetween(ad.firstSeenAt, ad.lastSeenAt)
+    const daysActive = computeDaysActive(ad.startDate, ad.stopDate ?? now)
     if (ad.adStatus === 'winner') {
       retiredWinners.push({ metaAdId: ad.metaAdId, daysActive })
     }
@@ -238,6 +239,28 @@ export async function getWinnersByCompetitor() {
   }
 
   return [...grouped.values()].sort((a, b) => b.maxDays - a.maxDays)
+}
+
+/**
+ * Recalculate daysActive and adStatus for ALL ads based on Meta's startDate/stopDate.
+ * Used to fix existing ads after the logic change.
+ */
+export async function recalculateAllAdStatuses() {
+  const ads = await db.ad.findMany({
+    select: { id: true, startDate: true, stopDate: true, adStatus: true },
+  })
+
+  let updated = 0
+  for (const ad of ads) {
+    const daysActive = computeDaysActive(ad.startDate, ad.stopDate)
+    const newStatus = ad.adStatus === 'eliminado' ? 'eliminado' : computeAdStatus(daysActive)
+    await db.ad.update({
+      where: { id: ad.id },
+      data: { daysActive, adStatus: newStatus },
+    })
+    updated++
+  }
+  return { updated }
 }
 
 /**

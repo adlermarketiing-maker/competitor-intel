@@ -61,7 +61,9 @@ export default function AdCard({ ad, showCompetitor = false }: AdCardProps) {
             <span className="text-xs text-slate-400">{ad.platforms.join(', ')}</span>
           )}
           <span className="text-xs text-slate-400">
-            Activo desde: {new Date(ad.firstSeenAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+            {ad.startDate
+              ? `Desde: ${new Date(ad.startDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`
+              : `Detectado: ${new Date(ad.firstSeenAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`}
             {ad.daysActive > 0 && ` · ${ad.daysActive} días`}
           </span>
         </div>
