@@ -36,6 +36,7 @@ model Competitor {
   scrapeJobs       ScrapeJob[]
   platformCourses  PlatformCourse[]
   marketAnalyses   MarketAnalysis[]
+  organicPosts     OrganicPost[]
 
   @@index([fbPageId])
   @@index([name])
@@ -258,4 +259,60 @@ model ScrapeJob {
 
   @@index([competitorId])
   @@index([status])
+}
+
+// Organic content from social platforms (Instagram, TikTok, YouTube)
+model OrganicPost {
+  id             String      @id @default(cuid())
+  platform       String      // instagram, tiktok, youtube
+  externalId     String      @unique
+  url            String
+  authorHandle   String
+  authorName     String?
+  competitorId   String?
+  competitor     Competitor? @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  caption        String?
+  hashtags       String[]
+  mediaType      String?     // image, carousel, reel, video, short
+  thumbnailUrl   String?
+  duration       Int?        // seconds
+
+  likes          Int         @default(0)
+  comments       Int         @default(0)
+  shares         Int         @default(0)
+  views          Int         @default(0)
+  followers      Int         @default(0)
+  engagementRate Float?
+
+  isViral        Boolean     @default(false)
+  viralScore     Float?      // engagement / avg_engagement
+  transcript     String?
+  soundName      String?     // TikTok sound name
+
+  publishedAt    DateTime?
+  scrapedAt      DateTime    @default(now())
+  searchKeywords String?
+
+  @@index([platform])
+  @@index([competitorId])
+  @@index([isViral])
+  @@index([publishedAt])
+}
+
+// Cross-analysis opportunities (organic trends vs ads)
+model TrendOpportunity {
+  id           String   @id @default(cuid())
+  type         String   // format_gap, hook_transfer, trending_topic, viral_sound
+  title        String
+  description  String
+  source       String   // platform(s) where detected
+  urgency      String   // high, medium, low
+  relatedPosts String[] // OrganicPost IDs
+
+  detectedAt   DateTime @default(now())
+  dismissed    Boolean  @default(false)
+
+  @@index([type])
+  @@index([detectedAt])
 }

@@ -230,6 +230,35 @@ export async function buildWeeklyDigest(): Promise<string | null> {
     lines.push('')
   }
 
+  // Organic trends section
+  try {
+    const { getOrganicTrendsSummary } = await import('@/lib/analysis/trends')
+    const trendsSummary = await getOrganicTrendsSummary(7)
+
+    if (trendsSummary) {
+      lines.push(`<b>📱 TENDENCIAS ORGÁNICAS</b>`)
+
+      if (trendsSummary.topVirals.length > 0) {
+        lines.push(`<b>🔥 Top virales:</b>`)
+        for (const v of trendsSummary.topVirals) {
+          lines.push(`  [${v.platform}] @${escHtml(v.authorHandle)}: "${escHtml(v.caption.slice(0, 50))}" — ${v.views > 0 ? v.views.toLocaleString() + ' views' : ''}`)
+        }
+      }
+
+      if (trendsSummary.trendingTopics.length > 0) {
+        lines.push(`📌 Topics trending: ${trendsSummary.trendingTopics.join(', ')}`)
+      }
+
+      if (trendsSummary.trendingSounds.length > 0) {
+        lines.push(`🎵 Sounds trending: ${trendsSummary.trendingSounds.map((s) => `${escHtml(s.sound)} (${s.count}x)`).join(', ')}`)
+      }
+
+      lines.push('')
+    }
+  } catch {
+    // Organic trends not available, skip
+  }
+
   return lines.join('\n')
 }
 
