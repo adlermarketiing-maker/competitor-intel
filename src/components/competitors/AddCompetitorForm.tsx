@@ -2,16 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-const COUNTRY_OPTIONS = [
-  { code: 'ES', label: 'España' },
-  { code: 'MX', label: 'México' },
-  { code: 'AR', label: 'Argentina' },
-  { code: 'CO', label: 'Colombia' },
-  { code: 'US', label: 'USA' },
-  { code: 'PE', label: 'Perú' },
-  { code: 'CL', label: 'Chile' },
-]
+import { COUNTRY_OPTIONS } from '@/lib/countries'
 
 export default function AddCompetitorForm() {
   const router = useRouter()

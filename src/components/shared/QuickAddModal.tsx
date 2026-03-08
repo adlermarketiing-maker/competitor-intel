@@ -3,16 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useClient } from '@/contexts/ClientContext'
-
-const COUNTRY_OPTIONS = [
-  { code: 'ES', label: 'ES' },
-  { code: 'MX', label: 'MX' },
-  { code: 'AR', label: 'AR' },
-  { code: 'CO', label: 'CO' },
-  { code: 'US', label: 'US' },
-  { code: 'PE', label: 'PE' },
-  { code: 'CL', label: 'CL' },
-]
+import { COUNTRY_OPTIONS } from '@/lib/countries'
 
 interface QuickAddModalProps {
   onClose: () => void

@@ -1,17 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-
-const COUNTRY_OPTIONS = [
-  { code: 'ES', label: 'España' },
-  { code: 'MX', label: 'México' },
-  { code: 'AR', label: 'Argentina' },
-  { code: 'CO', label: 'Colombia' },
-  { code: 'US', label: 'USA' },
-  { code: 'PE', label: 'Perú' },
-  { code: 'CL', label: 'Chile' },
-  { code: 'BR', label: 'Brasil' },
-]
+import { COUNTRY_OPTIONS } from '@/lib/countries'
 
 export default function SettingsPage() {
   const [token, setToken] = useState('')

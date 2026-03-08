@@ -3,17 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useClient } from '@/contexts/ClientContext'
 import DiscoveredTable, { type DiscoveredAdvertiser } from '@/components/discover/DiscoveredTable'
-
-const COUNTRY_OPTIONS = [
-  { code: 'ES', label: 'España' },
-  { code: 'MX', label: 'México' },
-  { code: 'AR', label: 'Argentina' },
-  { code: 'CO', label: 'Colombia' },
-  { code: 'US', label: 'EEUU' },
-  { code: 'PE', label: 'Perú' },
-  { code: 'CL', label: 'Chile' },
-  { code: 'EC', label: 'Ecuador' },
-]
+import { COUNTRY_OPTIONS } from '@/lib/countries'
 
 interface SearchResult {
   searchId: string
