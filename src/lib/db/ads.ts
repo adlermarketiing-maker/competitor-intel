@@ -133,16 +133,28 @@ export async function listAds(options: {
   maxDays?: number
   sortBy?: string
   platform?: string
+  hookType?: string
+  marketingAngle?: string
+  creativeFormat?: string
+  awarenessLevel?: string
+  copyLength?: string
+  minScore?: number
   page?: number
   limit?: number
 }) {
-  const { competitorId, isActive, adStatus, minDays, maxDays, sortBy, platform, page = 1, limit = 24 } = options
+  const { competitorId, isActive, adStatus, minDays, maxDays, sortBy, platform, hookType, marketingAngle, creativeFormat, awarenessLevel, copyLength, minScore, page = 1, limit = 24 } = options
 
   const where: Record<string, unknown> = {}
   if (competitorId) where.competitorId = competitorId
   if (isActive !== undefined) where.isActive = isActive
   if (adStatus) where.adStatus = adStatus
   if (platform) where.platforms = { has: platform }
+  if (hookType) where.hookType = hookType
+  if (marketingAngle) where.marketingAngle = marketingAngle
+  if (creativeFormat) where.creativeFormat = creativeFormat
+  if (awarenessLevel) where.awarenessLevel = awarenessLevel
+  if (copyLength) where.copyLength = copyLength
+  if (minScore !== undefined) where.aiScore = { gte: minScore }
   if (minDays !== undefined || maxDays !== undefined) {
     where.daysActive = {}
     if (minDays !== undefined) (where.daysActive as Record<string, number>).gte = minDays

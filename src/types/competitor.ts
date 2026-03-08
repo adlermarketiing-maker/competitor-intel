@@ -41,6 +41,23 @@ export interface Ad {
   lastSeenAt: Date
   createdAt: Date
   updatedAt: Date
+  // AI analysis
+  aiAnalyzed: boolean
+  hookType: string | null
+  marketingAngle: string | null
+  creativeFormat: string | null
+  awarenessLevel: string | null
+  copyLength: string | null
+  copyStructure: string | null
+  ctaText: string | null
+  ctaUrgency: boolean | null
+  offerPrice: string | null
+  offerDiscount: boolean | null
+  offerBonuses: string | null
+  offerGuarantee: string | null
+  offerScarcity: string | null
+  aiScore: number | null
+  aiSummary: string | null
 }
 
 export interface LandingPage {

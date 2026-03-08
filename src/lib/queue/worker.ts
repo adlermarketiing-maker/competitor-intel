@@ -184,6 +184,52 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
         await emit(jobDbId, 'progress', `🚀 Lanzamiento detectado: ${newAdsCount} anuncios nuevos en los últimos 3 días`)
       }
     } catch { /* ignore */ }
+
+    // AI tag analysis for unanalyzed ads
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        const { getUnanalyzedAds } = await import('@/lib/db/adAnalysis')
+        const { analyzeAdTags } = await import('@/lib/analysis/adTags')
+        const { saveAdAnalysis } = await import('@/lib/db/adAnalysis')
+
+        const unanalyzed = await getUnanalyzedAds(50)
+        const toAnalyze = unanalyzed.filter((a) =>
+          a.adCopyBodies.length > 0 || a.headline || a.description
+        )
+
+        if (toAnalyze.length > 0) {
+          await emit(jobDbId, 'progress', `Analizando ${toAnalyze.length} anuncios con IA...`)
+          let analyzed = 0
+          for (const ad of toAnalyze) {
+            try {
+              const tags = await analyzeAdTags({
+                copyBodies: ad.adCopyBodies,
+                headline: ad.headline,
+                description: ad.description,
+                caption: ad.caption,
+                ctaType: ad.ctaType,
+                hasVideo: ad.videoUrls.length > 0,
+                hasImages: ad.imageUrls.length > 0,
+                imageCount: ad.imageUrls.length,
+              })
+              await saveAdAnalysis(ad.id, tags)
+              analyzed++
+              if (analyzed % 10 === 0) {
+                await emit(jobDbId, 'progress', `IA: ${analyzed}/${toAnalyze.length} anuncios analizados`)
+              }
+            } catch {
+              // Skip individual ad analysis errors
+            }
+            // Small delay to avoid rate limits
+            await new Promise((r) => setTimeout(r, 300))
+          }
+          await emit(jobDbId, 'progress', `IA: ${analyzed} anuncios analizados con tags`)
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        await emit(jobDbId, 'progress', `Error en análisis IA de anuncios: ${msg}`)
+      }
+    }
   }
 
   // ── Step 1b: Extract real social links from competitor's own website ────────

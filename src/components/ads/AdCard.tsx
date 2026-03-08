@@ -84,6 +84,41 @@ export default function AdCard({ ad, showCompetitor = false }: AdCardProps) {
           <p className="text-xs text-slate-600 mb-3 line-clamp-3">{primaryCopy}</p>
         )}
 
+        {/* AI Tags */}
+        {ad.aiAnalyzed && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {ad.hookType && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700">
+                {ad.hookType.replace(/_/g, ' ')}
+              </span>
+            )}
+            {ad.marketingAngle && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700">
+                {ad.marketingAngle.replace(/_/g, ' ')}
+              </span>
+            )}
+            {ad.creativeFormat && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700">
+                {ad.creativeFormat.replace(/_/g, ' ')}
+              </span>
+            )}
+            {ad.awarenessLevel && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700">
+                {ad.awarenessLevel.replace(/_/g, ' ')}
+              </span>
+            )}
+            {ad.aiScore != null && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                ad.aiScore >= 8 ? 'bg-emerald-50 text-emerald-700'
+                : ad.aiScore >= 5 ? 'bg-yellow-50 text-yellow-700'
+                : 'bg-red-50 text-red-700'
+              }`}>
+                {ad.aiScore}/10
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Landing URL */}
         {ad.landingUrl && (
           <a

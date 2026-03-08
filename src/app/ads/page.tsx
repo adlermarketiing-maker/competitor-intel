@@ -20,6 +20,11 @@ interface CompetitorOption {
 type StatusFilter = '' | 'winner' | 'posible_winner'
 type SortOption = '' | 'daysActive' | 'newest' | 'oldest'
 
+const HOOK_TYPES = ['pregunta_retorica', 'declaracion_impactante', 'historia_personal', 'estadistica', 'contraintuitivo', 'llamada_directa', 'problema_dolor', 'resultado_transformacion', 'curiosidad_misterio', 'urgencia']
+const MARKETING_ANGLES = ['dolor', 'aspiracion', 'urgencia_escasez', 'prueba_social', 'curiosidad', 'comparacion', 'educativo', 'contrario_mito', 'oportunidad', 'fomo']
+const CREATIVE_FORMATS = ['imagen_estatica', 'carrusel', 'video_ugc', 'video_talking_head', 'video_broll', 'video_texto_animado', 'meme_humor', 'testimonial']
+const AWARENESS_LEVELS = ['inconsciente', 'consciente_problema', 'consciente_solucion', 'consciente_producto', 'mas_consciente']
+
 export default function AdsPage() {
   const [data, setData] = useState<AdsResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -30,6 +35,11 @@ export default function AdsPage() {
   const [sortBy, setSortBy] = useState<SortOption>('')
   const [minDays, setMinDays] = useState('')
   const [maxDays, setMaxDays] = useState('')
+  const [hookType, setHookType] = useState('')
+  const [marketingAngle, setMarketingAngle] = useState('')
+  const [creativeFormat, setCreativeFormat] = useState('')
+  const [awarenessLevel, setAwarenessLevel] = useState('')
+  const [minScore, setMinScore] = useState('')
   const [page, setPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
 
@@ -50,14 +60,19 @@ export default function AdsPage() {
     if (sortBy) params.set('sortBy', sortBy)
     if (minDays) params.set('minDays', minDays)
     if (maxDays) params.set('maxDays', maxDays)
+    if (hookType) params.set('hookType', hookType)
+    if (marketingAngle) params.set('marketingAngle', marketingAngle)
+    if (creativeFormat) params.set('creativeFormat', creativeFormat)
+    if (awarenessLevel) params.set('awarenessLevel', awarenessLevel)
+    if (minScore) params.set('minScore', minScore)
 
     fetch(`/api/ads?${params}`)
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [adStatus, isActiveFilter, page, competitorId, sortBy, minDays, maxDays])
+  }, [adStatus, isActiveFilter, page, competitorId, sortBy, minDays, maxDays, hookType, marketingAngle, creativeFormat, awarenessLevel, minScore])
 
-  const hasActiveFilters = competitorId !== '' || adStatus !== '' || isActiveFilter !== '' || sortBy !== '' || minDays !== '' || maxDays !== ''
+  const hasActiveFilters = competitorId !== '' || adStatus !== '' || isActiveFilter !== '' || sortBy !== '' || minDays !== '' || maxDays !== '' || hookType !== '' || marketingAngle !== '' || creativeFormat !== '' || awarenessLevel !== '' || minScore !== ''
 
   const clearFilters = () => {
     setCompetitorId('')
@@ -66,6 +81,11 @@ export default function AdsPage() {
     setSortBy('')
     setMinDays('')
     setMaxDays('')
+    setHookType('')
+    setMarketingAngle('')
+    setCreativeFormat('')
+    setAwarenessLevel('')
+    setMinScore('')
     setPage(1)
   }
 
@@ -176,6 +196,73 @@ export default function AdsPage() {
             className="w-20 h-9 px-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
           />
         </div>
+
+        {/* AI Tag Filters */}
+        <div className="relative">
+          <select
+            value={hookType}
+            onChange={(e) => { setHookType(e.target.value); setPage(1) }}
+            className="h-9 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 appearance-none cursor-pointer"
+          >
+            <option value="">Hook</option>
+            {HOOK_TYPES.map((v) => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
+          </select>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+
+        <div className="relative">
+          <select
+            value={marketingAngle}
+            onChange={(e) => { setMarketingAngle(e.target.value); setPage(1) }}
+            className="h-9 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 appearance-none cursor-pointer"
+          >
+            <option value="">Ángulo</option>
+            {MARKETING_ANGLES.map((v) => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
+          </select>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+
+        <div className="relative">
+          <select
+            value={creativeFormat}
+            onChange={(e) => { setCreativeFormat(e.target.value); setPage(1) }}
+            className="h-9 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 appearance-none cursor-pointer"
+          >
+            <option value="">Formato</option>
+            {CREATIVE_FORMATS.map((v) => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
+          </select>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+
+        <div className="relative">
+          <select
+            value={awarenessLevel}
+            onChange={(e) => { setAwarenessLevel(e.target.value); setPage(1) }}
+            className="h-9 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 appearance-none cursor-pointer"
+          >
+            <option value="">Awareness</option>
+            {AWARENESS_LEVELS.map((v) => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
+          </select>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+
+        <input
+          type="number"
+          placeholder="Score mín"
+          value={minScore}
+          onChange={(e) => { setMinScore(e.target.value); setPage(1) }}
+          min="1"
+          max="10"
+          className="w-20 h-9 px-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+        />
 
         {/* Clear filters */}
         {hasActiveFilters && (

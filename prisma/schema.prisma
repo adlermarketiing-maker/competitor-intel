@@ -71,12 +71,34 @@ model Ad {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // AI analysis tags (from Claude)
+  aiAnalyzed      Boolean  @default(false)
+  hookType        String?
+  marketingAngle  String?
+  creativeFormat  String?
+  awarenessLevel  String?
+  copyLength      String?
+  copyStructure   String?
+  ctaText         String?
+  ctaUrgency      Boolean?
+  offerPrice      String?
+  offerDiscount   Boolean?
+  offerBonuses    String?
+  offerGuarantee  String?
+  offerScarcity   String?
+  aiScore         Int?
+  aiSummary       String?
+
   landingPages LandingPage[]
 
   @@index([competitorId])
   @@index([isActive])
   @@index([adStatus])
   @@index([startDate])
+  @@index([aiAnalyzed])
+  @@index([hookType])
+  @@index([marketingAngle])
+  @@index([aiScore])
 }
 
 // A scraped landing page
