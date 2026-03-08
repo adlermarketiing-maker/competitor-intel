@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
-import { getSubscriberClient, jobChannel } from '@/lib/queue/events'
 import { getScrapeJob } from '@/lib/db/jobs'
 import { getLatestJobForCompetitor } from '@/lib/db/jobs'
+import { isRedisAvailable } from '@/lib/queue/bullmq'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,8 +22,19 @@ export async function GET(
     return new Response('No active job', { status: 404 })
   }
 
+  if (!isRedisAvailable()) {
+    return new Response('Redis unavailable — progress streaming disabled', { status: 503 })
+  }
+
+  const { getSubscriberClient, jobChannel } = await import('@/lib/queue/events')
+
   const encoder = new TextEncoder()
-  const subscriber = getSubscriberClient()
+  let subscriber: ReturnType<typeof getSubscriberClient>
+  try {
+    subscriber = getSubscriberClient()
+  } catch {
+    return new Response('Redis connection failed', { status: 503 })
+  }
 
   const stream = new ReadableStream({
     start(controller) {

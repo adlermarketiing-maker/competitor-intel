@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCompetitor } from '@/lib/db/competitors'
 import { createScrapeJob, getScrapeJob } from '@/lib/db/jobs'
-import { getScrapeQueue } from '@/lib/queue/bullmq'
+import { getScrapeQueue, isRedisAvailable } from '@/lib/queue/bullmq'
 import { getSettings } from '@/lib/db/settings'
 import type { JobType } from '@/types/scrape'
 
@@ -41,20 +41,26 @@ export async function POST(
 
     const job = await createScrapeJob(id, jobType)
 
-    const settings = await getSettings()
-    const effectiveCountries =
-      countries.length > 0 ? countries : (settings?.countries ?? ['ES', 'MX', 'AR', 'CO'])
+    if (isRedisAvailable()) {
+      try {
+        const settings = await getSettings()
+        const effectiveCountries =
+          countries.length > 0 ? countries : (settings?.countries ?? ['ES', 'MX', 'AR', 'CO'])
 
-    await getScrapeQueue().add(
-      'scrapeCompetitor',
-      {
-        jobDbId: job.id,
-        competitorId: id,
-        jobType,
-        countries: effectiveCountries,
-      },
-      { jobId: job.id }
-    )
+        await getScrapeQueue().add(
+          'scrapeCompetitor',
+          {
+            jobDbId: job.id,
+            competitorId: id,
+            jobType,
+            countries: effectiveCountries,
+          },
+          { jobId: job.id }
+        )
+      } catch (err) {
+        console.error('[Queue] Failed to enqueue scrape job:', err)
+      }
+    }
 
     return NextResponse.json({ jobId: job.id })
   } catch (err) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createCompetitor } from '@/lib/db/competitors'
 import { createScrapeJob } from '@/lib/db/jobs'
-import { getScrapeQueue } from '@/lib/queue/bullmq'
+import { getScrapeQueue, isRedisAvailable } from '@/lib/queue/bullmq'
 import { getSettings } from '@/lib/db/settings'
 import { db } from '@/lib/db/client'
 
@@ -48,11 +48,17 @@ export async function POST(req: NextRequest) {
 
     // Launch full scrape
     const job = await createScrapeJob(competitor.id, 'FULL_SCRAPE')
-    await getScrapeQueue().add(
-      'scrapeCompetitor',
-      { jobDbId: job.id, competitorId: competitor.id, jobType: 'FULL_SCRAPE', countries },
-      { jobId: job.id }
-    )
+    if (isRedisAvailable()) {
+      try {
+        await getScrapeQueue().add(
+          'scrapeCompetitor',
+          { jobDbId: job.id, competitorId: competitor.id, jobType: 'FULL_SCRAPE', countries },
+          { jobId: job.id }
+        )
+      } catch (err) {
+        console.error('[Queue] Failed to enqueue scrape job:', err)
+      }
+    }
 
     return NextResponse.json({ competitorId: competitor.id, jobId: job.id }, { status: 201 })
   } catch (err) {

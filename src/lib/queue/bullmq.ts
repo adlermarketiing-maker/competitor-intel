@@ -21,6 +21,11 @@ export function getRedisConnectionOpts() {
   return parseRedisUrl(process.env.REDIS_URL)
 }
 
+/** Returns true if Redis is configured */
+export function isRedisAvailable(): boolean {
+  return !!process.env.REDIS_URL
+}
+
 // Lazy singleton
 let _scrapeQueue: Queue | null = null
 
