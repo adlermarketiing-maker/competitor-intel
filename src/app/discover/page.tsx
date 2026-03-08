@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useClient } from '@/contexts/ClientContext'
 import DiscoveredTable, { type DiscoveredAdvertiser } from '@/components/discover/DiscoveredTable'
 import { COUNTRY_OPTIONS } from '@/lib/countries'
@@ -27,25 +27,53 @@ interface ProgressInfo {
   page?: number
 }
 
+function formatElapsed(ms: number): string {
+  const secs = Math.floor(ms / 1000)
+  if (secs < 60) return `${secs}s`
+  const mins = Math.floor(secs / 60)
+  const rem = secs % 60
+  return `${mins}m ${rem}s`
+}
+
 export default function DiscoverPage() {
   const { selectedClientId } = useClient()
   const [keywords, setKeywords] = useState('')
   const [selectedCountries, setSelectedCountries] = useState<string[]>(['ES', 'MX', 'AR', 'CO'])
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState<ProgressInfo | null>(null)
+  const [elapsed, setElapsed] = useState(0)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const startTimeRef = useRef<number>(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => {
+  const refreshHistory = useCallback(() => {
     const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
     fetch(`/api/discover${cParam}`)
       .then((r) => r.json())
       .then((data) => { setHistory(data); setLoadingHistory(false) })
       .catch(() => setLoadingHistory(false))
   }, [selectedClientId])
+
+  useEffect(() => { refreshHistory() }, [refreshHistory])
+
+  // Elapsed timer
+  useEffect(() => {
+    if (loading) {
+      startTimeRef.current = Date.now()
+      setElapsed(0)
+      timerRef.current = setInterval(() => {
+        setElapsed(Date.now() - startTimeRef.current)
+      }, 1000)
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [loading])
 
   const toggleCountry = (code: string) => {
     setSelectedCountries((prev) =>
@@ -57,7 +85,6 @@ export default function DiscoverPage() {
     e.preventDefault()
     if (!keywords.trim()) return
 
-    // Abort any in-flight search
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -65,7 +92,9 @@ export default function DiscoverPage() {
     setLoading(true)
     setError(null)
     setResult(null)
-    setProgress({ message: 'Iniciando búsqueda...', adsScanned: 0, advertisersFound: 0 })
+    setProgress({ message: 'Iniciando busqueda...', adsScanned: 0, advertisersFound: 0 })
+
+    let receivedDone = false
 
     try {
       const res = await fetch('/api/discover', {
@@ -84,7 +113,6 @@ export default function DiscoverPage() {
         throw new Error(data.error || `HTTP ${res.status}`)
       }
 
-      // Read the SSE stream
       const reader = res.body?.getReader()
       if (!reader) throw new Error('No se pudo leer la respuesta')
 
@@ -97,9 +125,8 @@ export default function DiscoverPage() {
 
         buffer += decoder.decode(value, { stream: true })
 
-        // Parse SSE events from buffer
         const lines = buffer.split('\n')
-        buffer = lines.pop() ?? '' // Keep incomplete line in buffer
+        buffer = lines.pop() ?? ''
 
         let eventType = ''
         for (const line of lines) {
@@ -112,14 +139,10 @@ export default function DiscoverPage() {
               if (eventType === 'progress') {
                 setProgress(data as ProgressInfo)
               } else if (eventType === 'done') {
+                receivedDone = true
                 setResult(data as SearchResult)
                 setProgress(null)
-                // Refresh history
-                const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
-                fetch(`/api/discover${cParam}`)
-                  .then((r) => r.json())
-                  .then(setHistory)
-                  .catch(() => {})
+                refreshHistory()
               } else if (eventType === 'error') {
                 throw new Error(data.error)
               }
@@ -130,6 +153,34 @@ export default function DiscoverPage() {
             }
             eventType = ''
           }
+        }
+      }
+
+      // SSE stream ended without 'done' event — try to recover from DB
+      if (!receivedDone) {
+        setProgress({ message: 'Reconectando... buscando resultados guardados', adsScanned: 0, advertisersFound: 0 })
+        // Wait a moment for DB writes to complete
+        await new Promise((r) => setTimeout(r, 2000))
+        const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
+        const histRes = await fetch(`/api/discover${cParam}`)
+        const histData: HistoryItem[] = await histRes.json()
+        setHistory(histData)
+        // Find the latest search matching our keywords
+        const latest = histData.find((h) =>
+          h.keywords.toLowerCase() === keywords.trim().toLowerCase() &&
+          h.discoveredCompetitors.length > 0
+        )
+        if (latest) {
+          setResult({
+            searchId: latest.id,
+            keywords: latest.keywords,
+            total: latest.discoveredCompetitors.length,
+            advertisers: latest.discoveredCompetitors,
+          })
+          setProgress(null)
+        } else {
+          setError('La conexion se interrumpio. Si la busqueda se completo, recarga la pagina para ver los resultados.')
+          setProgress(null)
         }
       }
     } catch (err) {
@@ -147,6 +198,21 @@ export default function DiscoverPage() {
     setProgress(null)
   }
 
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (deletingId) return
+    setDeletingId(id)
+    try {
+      await fetch(`/api/discover/${id}`, { method: 'DELETE' })
+      setHistory((prev) => prev.filter((h) => h.id !== id))
+      if (result?.searchId === id) setResult(null)
+    } catch {
+      // ignore
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const loadFromHistory = (item: HistoryItem) => {
     setError(null)
     setProgress(null)
@@ -160,6 +226,10 @@ export default function DiscoverPage() {
     setSelectedCountries(item.countries)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  // Split history into searches with results and empty ones
+  const historyWithResults = history.filter((h) => h.discoveredCompetitors.length > 0)
+  const historyEmpty = history.filter((h) => h.discoveredCompetitors.length === 0)
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -262,12 +332,17 @@ export default function DiscoverPage() {
       {/* Progress bar */}
       {progress && (
         <div className="mb-6 bg-violet-50 border border-violet-200 rounded-2xl px-5 py-4">
-          <div className="flex items-center gap-3 mb-2">
-            <svg className="w-5 h-5 animate-spin text-violet-600 flex-shrink-0" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <p className="text-sm font-medium text-violet-800">{progress.message}</p>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 animate-spin text-violet-600 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <p className="text-sm font-medium text-violet-800">{progress.message}</p>
+            </div>
+            {elapsed > 0 && (
+              <span className="text-xs text-violet-400 font-mono flex-shrink-0">{formatElapsed(elapsed)}</span>
+            )}
           </div>
           {(progress.adsScanned ?? 0) > 0 && (
             <div className="flex items-center gap-6 ml-8">
@@ -297,33 +372,37 @@ export default function DiscoverPage() {
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-sm font-semibold text-slate-700">
               Resultados para <span className="text-violet-700">&quot;{result.keywords}&quot;</span>
+              {result.total > 0 && (
+                <span className="text-slate-400 font-normal ml-1">
+                  — {result.total} anunciantes relevantes (formacion/mentoria/servicios)
+                </span>
+              )}
             </h2>
           </div>
           <DiscoveredTable advertisers={result.advertisers} />
         </div>
       )}
 
-      {/* History */}
-      {!loadingHistory && history.length > 0 && (
-        <div>
+      {/* History — searches with results */}
+      {!loadingHistory && historyWithResults.length > 0 && (
+        <div className="mb-6">
           <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
             Busquedas anteriores
           </h2>
           <div className="space-y-2">
-            {history.map((item) => (
-              <button
+            {historyWithResults.map((item) => (
+              <div
                 key={item.id}
                 onClick={() => loadFromHistory(item)}
-                className="w-full text-left bg-white rounded-2xl border border-slate-100 px-5 py-3.5 hover:border-violet-200 hover:bg-violet-50/40 transition-colors group"
+                className="w-full text-left bg-white rounded-2xl border border-slate-100 px-5 py-3.5 hover:border-violet-200 hover:bg-violet-50/40 transition-colors group cursor-pointer"
               >
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-800 group-hover:text-violet-700 transition-colors">
                       {item.keywords}
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
                       {item.discoveredCompetitors.length} anunciantes ·{' '}
-                      {item.countries.join(', ')} ·{' '}
                       {new Date(item.createdAt).toLocaleDateString('es-ES', {
                         day: 'numeric',
                         month: 'short',
@@ -332,14 +411,59 @@ export default function DiscoverPage() {
                       })}
                     </p>
                   </div>
-                  <svg className="w-4 h-4 text-slate-300 group-hover:text-violet-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={(e) => handleDelete(item.id, e)}
+                      disabled={deletingId === item.id}
+                      className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Eliminar busqueda"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                    <svg className="w-4 h-4 text-slate-300 group-hover:text-violet-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         </div>
+      )}
+
+      {/* History — empty searches (collapsed) */}
+      {!loadingHistory && historyEmpty.length > 0 && (
+        <details className="mb-6">
+          <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-500 transition-colors">
+            {historyEmpty.length} busqueda{historyEmpty.length !== 1 ? 's' : ''} sin resultados
+          </summary>
+          <div className="space-y-1 mt-2">
+            {historyEmpty.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-2 group"
+              >
+                <div>
+                  <span className="text-xs text-slate-500">{item.keywords}</span>
+                  <span className="text-[10px] text-slate-300 ml-2">
+                    {new Date(item.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                  </span>
+                </div>
+                <button
+                  onClick={(e) => handleDelete(item.id, e)}
+                  disabled={deletingId === item.id}
+                  className="p-1 rounded text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {/* Empty state */}

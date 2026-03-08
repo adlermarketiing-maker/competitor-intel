@@ -74,15 +74,22 @@ function scoreAdvertiser(a: DiscoveredAdvertiserRaw): number {
   return score
 }
 
-// ── Sanitize text for PostgreSQL (remove null bytes, broken hex escapes) ─────
+// ── Sanitize text for PostgreSQL ─────────────────────────────────────────────
+// PostgreSQL TEXT columns reject null bytes and certain escape sequences.
+// Ad copy from Meta can contain any unicode, emojis, broken escapes, etc.
 
 function sanitize(str: string | null | undefined): string | null {
   if (!str) return null
   return str
-    .replace(/\x00/g, '')           // null bytes
-    .replace(/\\x[0-9a-fA-F]?(?![0-9a-fA-F])/g, '') // broken \x hex escapes
-    .replace(/\\u[0-9a-fA-F]{0,3}(?![0-9a-fA-F])/g, '') // broken \u escapes
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '') // control chars except \t \n \r
+    .replace(/\0/g, '')                                   // null bytes (JS literal)
+    .replace(/\x00/g, '')                                 // null bytes (hex)
+    .replace(/\\x[0-9a-fA-F]{0,1}(?![0-9a-fA-F])/g, '')  // broken \xN (incomplete hex pair)
+    .replace(/\\u[0-9a-fA-F]{0,3}(?![0-9a-fA-F])/g, '')  // broken \uNNN (incomplete unicode)
+    .replace(/\\u\{[^}]*$/g, '')                           // broken \u{...} (unclosed brace)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')   // C0 control chars + DEL (keep \t \n \r)
+    .replace(/[\uFFFE\uFFFF]/g, '')                        // BOM and non-characters
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')   // lone high surrogates
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')  // lone low surrogates
 }
 
 // ── API Routes ──────────────────────────────────────────────────────────────
@@ -186,26 +193,44 @@ export async function POST(req: NextRequest) {
           },
         })
 
-        // Batch insert in chunks of 50
+        // Batch insert in chunks of 50, with retry on failure
         const BATCH_SIZE = 50
+        let savedCount = 0
         for (let i = 0; i < advertisers.length; i += BATCH_SIZE) {
           const batch = advertisers.slice(i, i + BATCH_SIZE)
-          await db.discoveredCompetitor.createMany({
-            data: batch.map((a) => ({
-              searchId: search.id,
-              pageName: sanitize(a.pageName) ?? 'Desconocido',
-              pageId: a.pageId || null,
-              adCount: a.adCount,
-              sampleCopy: sanitize(a.sampleCopy),
-              sampleLandingUrl: a.sampleLandingUrl,
-            })),
-          })
+          const records = batch.map((a) => ({
+            searchId: search.id,
+            pageName: sanitize(a.pageName) ?? 'Desconocido',
+            pageId: a.pageId || null,
+            adCount: a.adCount,
+            sampleCopy: sanitize(a.sampleCopy),
+            sampleLandingUrl: a.sampleLandingUrl,
+          }))
+
+          try {
+            await db.discoveredCompetitor.createMany({ data: records })
+            savedCount += batch.length
+          } catch (batchErr) {
+            console.error(`[Discover] Batch ${i}-${i + BATCH_SIZE} failed, retrying one by one:`, batchErr instanceof Error ? batchErr.message : batchErr)
+            // Fallback: insert one by one, skip problematic records
+            for (const rec of records) {
+              try {
+                await db.discoveredCompetitor.create({ data: rec })
+                savedCount++
+              } catch (singleErr) {
+                console.error(`[Discover] Skip "${rec.pageName}":`, singleErr instanceof Error ? singleErr.message : singleErr)
+              }
+            }
+          }
+
           send('progress', {
             message: `Guardando... ${Math.min(i + BATCH_SIZE, advertisers.length)}/${advertisers.length}`,
             adsScanned: 0,
             advertisersFound: advertisers.length,
           })
         }
+
+        console.log(`[Discover] Saved ${savedCount}/${advertisers.length} advertisers`)
 
         console.log(`[Discover] DB save complete. Fetching records...`)
 
@@ -237,8 +262,18 @@ export async function POST(req: NextRequest) {
           advertisers: enrichedAdvertisers,
         })
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
+        let msg = err instanceof Error ? err.message : String(err)
         console.error(`[Discover] Error:`, err)
+        // Human-readable error messages for common failures
+        if (msg.includes('401') || msg.includes('Unauthorized')) {
+          msg = 'La API key de SearchAPI es inválida. Revísala en Railway.'
+        } else if (msg.includes('429') || msg.includes('rate limit')) {
+          msg = 'SearchAPI ha limitado las peticiones. Espera unos minutos y vuelve a intentarlo.'
+        } else if (msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT')) {
+          msg = 'No se pudo conectar con la base de datos. Comprueba que Supabase está activo.'
+        } else if (msg.includes('credit') || msg.includes('quota')) {
+          msg = 'Se han agotado los créditos de SearchAPI. Recarga tu plan.'
+        }
         send('error', { error: msg })
       } finally {
         controller.close()
