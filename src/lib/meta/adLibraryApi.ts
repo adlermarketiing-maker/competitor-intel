@@ -233,6 +233,205 @@ export async function fetchAdsForPage(
   return ads
 }
 
+// ── Keyword-based ad content search (for Discover) ──────────────────────────
+
+export interface DiscoveredAdvertiserRaw {
+  pageId: string
+  pageName: string
+  ads: MetaAdRaw[]
+  landingUrls: Set<string>
+  adCopies: string[]
+  adImages: string[]
+}
+
+interface KeywordSearchOptions {
+  keywords: string
+  countries: string[]
+  activeStatus?: 'ACTIVE' | 'INACTIVE' | 'ALL'
+  maxPages?: number          // max API pages to paginate through (default 200)
+  onProgress?: (info: { adsScanned: number; advertisersFound: number; page: number }) => void
+  onLog?: (msg: string) => void
+}
+
+/**
+ * Search the Meta Ad Library by KEYWORD IN AD CONTENT (not page name).
+ * Uses the `meta_ad_library` engine with `search_terms` parameter.
+ *
+ * Strategy: ONE deep global search with country=ALL, paginating through as
+ * many pages as the API allows. This is far more efficient than searching
+ * each country individually — a single search_terms query can return tens of
+ * thousands of ads from all countries at once.
+ *
+ * After the global pass, we do a second pass on each explicitly-selected
+ * country to catch region-specific ads that the global search might rank lower.
+ */
+export async function searchAdsByKeyword(
+  apiKey: string,
+  options: KeywordSearchOptions,
+): Promise<DiscoveredAdvertiserRaw[]> {
+  const log = options.onLog ?? ((msg: string) => console.log(msg))
+  const maxPages = options.maxPages ?? 200
+  const advertisersMap = new Map<string, DiscoveredAdvertiserRaw>()
+  let totalAdsScanned = 0
+  let totalApiPages = 0
+
+  const processAds = (ads: SearchApiAd[]) => {
+    for (const ad of ads) {
+      if (!ad.ad_archive_id) continue
+      totalAdsScanned++
+
+      const mapped = mapAd(ad)
+      const pageId = ad.page_id ?? mapped.page_id ?? 'unknown'
+      const pageName = ad.snapshot?.page_name ?? mapped.page_name ?? 'Desconocido'
+
+      let advertiser = advertisersMap.get(pageId)
+      if (!advertiser) {
+        advertiser = {
+          pageId,
+          pageName,
+          ads: [],
+          landingUrls: new Set(),
+          adCopies: [],
+          adImages: [],
+        }
+        advertisersMap.set(pageId, advertiser)
+      }
+
+      advertiser.ads.push(mapped)
+
+      if (mapped.ad_creative_link_url) {
+        advertiser.landingUrls.add(mapped.ad_creative_link_url)
+      }
+      if (mapped.ad_creative_bodies?.[0] && advertiser.adCopies.length < 10) {
+        advertiser.adCopies.push(mapped.ad_creative_bodies[0].slice(0, 500))
+      }
+      if (mapped.ad_creative_images?.[0]?.original_image_url && advertiser.adImages.length < 10) {
+        advertiser.adImages.push(mapped.ad_creative_images[0].original_image_url)
+      }
+    }
+  }
+
+  /**
+   * Paginate through one search query until exhaustion or maxPages.
+   * Returns the number of pages actually fetched.
+   */
+  const paginateSearch = async (
+    label: string,
+    baseParams: Record<string, string>,
+    pagesLimit: number,
+  ): Promise<number> => {
+    const params = { ...baseParams }
+    let pageNum = 0
+
+    while (pageNum < pagesLimit) {
+      pageNum++
+      totalApiPages++
+
+      let response: SearchApiResponse
+      try {
+        const { data } = await axios.get<SearchApiResponse>(SEARCHAPI_URL, { params })
+        response = data
+      } catch (err) {
+        if (axios.isAxiosError(err)) {
+          const status = err.response?.status
+          if (status === 429) {
+            log(`Rate limited (${label}, p${pageNum}). Esperando 5s...`)
+            await new Promise((r) => setTimeout(r, 5000))
+            // Retry once
+            try {
+              const { data } = await axios.get<SearchApiResponse>(SEARCHAPI_URL, { params })
+              response = data
+            } catch {
+              log(`Rate limited de nuevo. Parando búsqueda ${label}.`)
+              break
+            }
+          } else if (status === 401) {
+            throw new Error('SearchAPI key inválida')
+          } else {
+            log(`Error HTTP ${status} en ${label} p${pageNum}. Saltando...`)
+            break
+          }
+        } else {
+          throw err
+        }
+      }
+
+      if (response!.error) {
+        if (response!.error.toLowerCase().includes('didn\'t return any results') ||
+            response!.error.toLowerCase().includes('no results')) {
+          break
+        }
+        log(`API error (${label} p${pageNum}): ${response!.error}`)
+        break
+      }
+
+      if (!response!.ads || response!.ads.length === 0) break
+
+      if (pageNum === 1 && response!.search_information?.total_results) {
+        log(`${label}: ~${response!.search_information.total_results.toLocaleString()} anuncios disponibles`)
+      }
+
+      processAds(response!.ads)
+
+      options.onProgress?.({
+        adsScanned: totalAdsScanned,
+        advertisersFound: advertisersMap.size,
+        page: totalApiPages,
+      })
+
+      if (!response!.pagination?.next_page_token) break
+      params.next_page_token = response!.pagination.next_page_token
+    }
+
+    return pageNum
+  }
+
+  // ── Pass 1: Global deep search (country=ALL) ─────────────────────────────
+  log(`Búsqueda global profunda por "${options.keywords}"...`)
+  const globalPages = await paginateSearch('Global', {
+    engine: 'meta_ad_library',
+    api_key: apiKey,
+    ad_type: 'all',
+    search_terms: options.keywords,
+    country: 'ALL',
+    active_status: (options.activeStatus ?? 'all').toLowerCase(),
+  }, maxPages)
+
+  log(`Búsqueda global: ${globalPages} páginas → ${totalAdsScanned} anuncios, ${advertisersMap.size} anunciantes`)
+
+  // ── Pass 2: Per-country searches for selected countries (10 pages each) ──
+  // This catches region-specific ads that may not appear high in global results.
+  // Only search up to 8 key countries to avoid burning too many API credits.
+  const countryCodes = options.countries.length > 0 ? options.countries : []
+  const keyCountries = countryCodes.slice(0, 8)
+
+  if (keyCountries.length > 0) {
+    const remainingPages = maxPages - totalApiPages
+    const pagesPerCountry = Math.max(5, Math.floor(remainingPages / keyCountries.length))
+
+    log(`Búsqueda por países: ${keyCountries.join(', ')} (${pagesPerCountry} páginas c/u)...`)
+
+    for (const country of keyCountries) {
+      if (totalApiPages >= maxPages) break
+
+      const fetched = await paginateSearch(`País ${country}`, {
+        engine: 'meta_ad_library',
+        api_key: apiKey,
+        ad_type: 'all',
+        search_terms: options.keywords,
+        country,
+        active_status: (options.activeStatus ?? 'all').toLowerCase(),
+      }, pagesPerCountry)
+
+      log(`País ${country}: ${fetched} páginas`)
+    }
+  }
+
+  log(`✓ TOTAL: ${totalApiPages} llamadas API, ${totalAdsScanned.toLocaleString()} anuncios escaneados, ${advertisersMap.size} anunciantes únicos`)
+
+  return [...advertisersMap.values()].sort((a, b) => b.ads.length - a.ads.length)
+}
+
 export async function fetchAdsViaSearchApi(
   apiKey: string,
   options: FetchAdsApiOptions
