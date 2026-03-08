@@ -392,7 +392,7 @@ export async function searchAdsByKeyword(
     engine: 'meta_ad_library',
     api_key: apiKey,
     ad_type: 'all',
-    search_terms: options.keywords,
+    q: options.keywords,
     country: 'ALL',
     active_status: (options.activeStatus ?? 'all').toLowerCase(),
   }, maxPages)
@@ -418,7 +418,7 @@ export async function searchAdsByKeyword(
         engine: 'meta_ad_library',
         api_key: apiKey,
         ad_type: 'all',
-        search_terms: options.keywords,
+        q: options.keywords,
         country,
         active_status: (options.activeStatus ?? 'all').toLowerCase(),
       }, pagesPerCountry)
