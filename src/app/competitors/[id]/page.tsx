@@ -13,15 +13,25 @@ import type { ScrapeJob } from '@/types/scrape'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MarketAnalysis = any
 
+interface AdStatusCounts {
+  nuevo: number
+  activo: number
+  winner: number
+  eliminado: number
+  total: number
+}
+
 interface CompetitorData {
   competitor: Competitor & { _count?: { ads: number } }
   ads: Ad[]
   landingPages: LandingPage[]
   latestJob: ScrapeJob | null
   marketAnalysis: MarketAnalysis | null
+  adStatusCounts: AdStatusCounts
 }
 
-type AdFilter = 'all' | 'active' | 'inactive'
+type AdFilter = 'all' | 'nuevo' | 'activo' | 'winner' | 'eliminado'
+type AdSort = 'recent' | 'daysActive' | 'oldest'
 
 export default function CompetitorProfilePage() {
   const { id } = useParams<{ id: string }>()
@@ -33,6 +43,7 @@ export default function CompetitorProfilePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [adFilter, setAdFilter] = useState<AdFilter>('all')
+  const [adSort, setAdSort] = useState<AdSort>('recent')
   const [scraping, setScraping] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string | null>(jobIdParam)
   const [deleting, setDeleting] = useState(false)
@@ -115,10 +126,15 @@ export default function CompetitorProfilePage() {
     )
   }
 
-  const { competitor, ads, landingPages, latestJob, marketAnalysis } = data
-  const activeAds = ads.filter((a) => a.isActive)
-  const inactiveAds = ads.filter((a) => !a.isActive)
-  const visibleAds = adFilter === 'active' ? activeAds : adFilter === 'inactive' ? inactiveAds : ads
+  const { competitor, ads, landingPages, latestJob, marketAnalysis, adStatusCounts } = data
+
+  const filteredAds = adFilter === 'all' ? ads : ads.filter((a) => a.adStatus === adFilter)
+
+  const visibleAds = [...filteredAds].sort((a, b) => {
+    if (adSort === 'daysActive') return (b.daysActive || 0) - (a.daysActive || 0)
+    if (adSort === 'oldest') return new Date(a.firstSeenAt).getTime() - new Date(b.firstSeenAt).getTime()
+    return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
+  })
   const isJobRunning = latestJob?.status === 'RUNNING' || (scraping && !currentJobId)
 
   return (
@@ -238,28 +254,50 @@ export default function CompetitorProfilePage() {
         <section>
           <div className="flex items-center gap-3 mb-5">
             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Anuncios</h2>
-            <span className="text-sm text-slate-500">{ads.length} total · {activeAds.length} activos</span>
+            <span className="text-sm text-slate-500">
+              {adStatusCounts.total} total
+              {adStatusCounts.winner > 0 && <> · <span className="text-emerald-600 font-semibold">{adStatusCounts.winner} winners</span></>}
+            </span>
             <div className="flex-1 h-px bg-slate-100" />
           </div>
 
-          <div className="flex gap-2 mb-5">
+          {/* Status filter tabs */}
+          <div className="flex flex-wrap items-center gap-2 mb-5">
             {([
-              { label: 'Todos', value: 'all' as const, count: ads.length },
-              { label: 'Activos', value: 'active' as const, count: activeAds.length },
-              { label: 'Inactivos', value: 'inactive' as const, count: inactiveAds.length },
-            ]).map(({ label, value, count }) => (
+              { label: 'Todos', value: 'all' as const, count: adStatusCounts.total, color: 'bg-violet-600' },
+              { label: 'Winners', value: 'winner' as const, count: adStatusCounts.winner, color: 'bg-emerald-600' },
+              { label: 'Nuevos', value: 'nuevo' as const, count: adStatusCounts.nuevo, color: 'bg-blue-600' },
+              { label: 'Activos', value: 'activo' as const, count: adStatusCounts.activo, color: 'bg-slate-600' },
+              { label: 'Eliminados', value: 'eliminado' as const, count: adStatusCounts.eliminado, color: 'bg-red-600' },
+            ]).map(({ label, value, count, color }) => (
               <button
                 key={value}
                 onClick={() => setAdFilter(value)}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
                   adFilter === value
-                    ? 'bg-violet-600 text-white'
+                    ? `${color} text-white`
                     : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
                 }`}
               >
                 {label} <span className="opacity-70">({count})</span>
               </button>
             ))}
+
+            {/* Sort selector */}
+            <div className="ml-auto relative">
+              <select
+                value={adSort}
+                onChange={(e) => setAdSort(e.target.value as AdSort)}
+                className="h-8 pl-3 pr-7 bg-white border border-slate-200 rounded-xl text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-400 appearance-none cursor-pointer"
+              >
+                <option value="recent">Más recientes</option>
+                <option value="daysActive">Más días activo</option>
+                <option value="oldest">Más antiguos</option>
+              </select>
+              <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
 
           {visibleAds.length === 0 ? (

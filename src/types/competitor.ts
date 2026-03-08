@@ -33,6 +33,8 @@ export interface Ad {
   pageId: string | null
   pageName: string | null
   isActive: boolean
+  adStatus: string
+  daysActive: number
   startDate: Date | null
   stopDate: Date | null
   firstSeenAt: Date

@@ -62,6 +62,8 @@ model Ad {
   pageName      String?
 
   isActive    Boolean  @default(true)
+  adStatus    String   @default("nuevo")  // nuevo, activo, winner, eliminado
+  daysActive  Int      @default(0)
   startDate   DateTime?
   stopDate    DateTime?
   firstSeenAt DateTime @default(now())
@@ -73,6 +75,7 @@ model Ad {
 
   @@index([competitorId])
   @@index([isActive])
+  @@index([adStatus])
   @@index([startDate])
 }
 

@@ -17,12 +17,18 @@ interface CompetitorOption {
   name: string
 }
 
+type StatusFilter = '' | 'nuevo' | 'activo' | 'winner' | 'eliminado'
+type SortOption = '' | 'daysActive' | 'newest' | 'oldest'
+
 export default function AdsPage() {
   const [data, setData] = useState<AdsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([])
   const [competitorId, setCompetitorId] = useState('')
-  const [isActive, setIsActive] = useState('')
+  const [adStatus, setAdStatus] = useState<StatusFilter>('')
+  const [sortBy, setSortBy] = useState<SortOption>('')
+  const [minDays, setMinDays] = useState('')
+  const [maxDays, setMaxDays] = useState('')
   const [page, setPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
 
@@ -37,16 +43,28 @@ export default function AdsPage() {
   useEffect(() => {
     setLoading(true)
     const params = new URLSearchParams({ page: String(page), limit: '24' })
-    if (isActive === 'true' || isActive === 'false') params.set('isActive', isActive)
+    if (adStatus) params.set('adStatus', adStatus)
     if (competitorId) params.set('competitorId', competitorId)
+    if (sortBy) params.set('sortBy', sortBy)
+    if (minDays) params.set('minDays', minDays)
+    if (maxDays) params.set('maxDays', maxDays)
 
     fetch(`/api/ads?${params}`)
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [isActive, page, competitorId])
+  }, [adStatus, page, competitorId, sortBy, minDays, maxDays])
 
-  const hasActiveFilters = competitorId !== '' || isActive !== ''
+  const hasActiveFilters = competitorId !== '' || adStatus !== '' || sortBy !== '' || minDays !== '' || maxDays !== ''
+
+  const clearFilters = () => {
+    setCompetitorId('')
+    setAdStatus('')
+    setSortBy('')
+    setMinDays('')
+    setMaxDays('')
+    setPage(1)
+  }
 
   return (
     <div className="p-8">
@@ -78,18 +96,20 @@ export default function AdsPage() {
           </svg>
         </div>
 
-        {/* Active / inactive filter */}
+        {/* Status filter */}
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-          {[
-            { label: 'Todos', value: '' },
-            { label: 'Activos', value: 'true' },
-            { label: 'Inactivos', value: 'false' },
-          ].map(({ label, value }) => (
+          {([
+            { label: 'Todos', value: '' as StatusFilter },
+            { label: 'Winners', value: 'winner' as StatusFilter },
+            { label: 'Nuevos', value: 'nuevo' as StatusFilter },
+            { label: 'Activos', value: 'activo' as StatusFilter },
+            { label: 'Eliminados', value: 'eliminado' as StatusFilter },
+          ]).map(({ label, value }) => (
             <button
               key={value}
-              onClick={() => { setIsActive(value); setPage(1) }}
+              onClick={() => { setAdStatus(value); setPage(1) }}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                isActive === value
+                adStatus === value
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
@@ -99,13 +119,49 @@ export default function AdsPage() {
           ))}
         </div>
 
+        {/* Sort */}
+        <div className="relative">
+          <select
+            value={sortBy}
+            onChange={(e) => { setSortBy(e.target.value as SortOption); setPage(1) }}
+            className="h-9 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 appearance-none cursor-pointer"
+          >
+            <option value="">Más recientes</option>
+            <option value="daysActive">Más días activo</option>
+            <option value="newest">Detección más reciente</option>
+            <option value="oldest">Más antiguos</option>
+          </select>
+          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+
+        {/* Days range filter */}
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            placeholder="Min días"
+            value={minDays}
+            onChange={(e) => { setMinDays(e.target.value); setPage(1) }}
+            className="w-20 h-9 px-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+          />
+          <span className="text-xs text-slate-400">-</span>
+          <input
+            type="number"
+            placeholder="Max días"
+            value={maxDays}
+            onChange={(e) => { setMaxDays(e.target.value); setPage(1) }}
+            className="w-20 h-9 px-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+          />
+        </div>
+
         {/* Clear filters */}
         {hasActiveFilters && (
           <button
-            onClick={() => { setCompetitorId(''); setIsActive(''); setPage(1) }}
+            onClick={clearFilters}
             className="h-9 px-3 text-xs font-medium text-slate-500 hover:text-slate-700 border border-slate-200 bg-white rounded-xl transition-colors"
           >
-            Limpiar ×
+            Limpiar x
           </button>
         )}
       </div>

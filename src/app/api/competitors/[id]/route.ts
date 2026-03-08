@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCompetitor, deleteCompetitor, resetCompetitorData } from '@/lib/db/competitors'
-import { getAdsForCompetitor } from '@/lib/db/ads'
+import { getAdsForCompetitor, getAdStatusCounts } from '@/lib/db/ads'
 import { getLandingPagesForCompetitor } from '@/lib/db/landings'
 import { getLatestJobForCompetitor } from '@/lib/db/jobs'
 import { getMarketAnalysisForCompetitor } from '@/lib/db/market'
@@ -11,19 +11,20 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const [competitor, ads, landingPages, latestJob, marketAnalysis] = await Promise.all([
+    const [competitor, ads, landingPages, latestJob, marketAnalysis, adStatusCounts] = await Promise.all([
       getCompetitor(id),
       getAdsForCompetitor(id),
       getLandingPagesForCompetitor(id),
       getLatestJobForCompetitor(id),
       getMarketAnalysisForCompetitor(id),
+      getAdStatusCounts(id),
     ])
 
     if (!competitor) {
       return NextResponse.json({ error: 'Competitor not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ competitor, ads, landingPages, latestJob, marketAnalysis })
+    return NextResponse.json({ competitor, ads, landingPages, latestJob, marketAnalysis, adStatusCounts })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })

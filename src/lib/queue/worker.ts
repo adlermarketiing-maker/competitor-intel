@@ -4,7 +4,7 @@ import { publishJobEvent } from './events'
 import { getMetaToken } from '@/lib/db/settings'
 import { getSettings } from '@/lib/db/settings'
 import { fetchAdsForCompetitor, buildAdLibraryUrl, buildFacebookPageUrl, buildInstagramUrl } from '@/lib/meta/adLibrary'
-import { upsertAd } from '@/lib/db/ads'
+import { upsertAd, markEliminatedAds, detectLaunch } from '@/lib/db/ads'
 import { upsertLandingPage } from '@/lib/db/landings'
 import { updateScrapeJob } from '@/lib/db/jobs'
 import { getCompetitor, updateCompetitor } from '@/lib/db/competitors'
@@ -161,6 +161,29 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     }
 
     await emit(jobDbId, 'progress', `${completedTasks} anuncios guardados`)
+
+    // Mark ads not found in this scrape as "eliminado"
+    const scrapedMetaAdIds = adsRaw.map((a) => a.id)
+    try {
+      const { eliminatedCount, retiredWinners } = await markEliminatedAds(competitorId, scrapedMetaAdIds)
+      if (eliminatedCount > 0) {
+        await emit(jobDbId, 'progress', `${eliminatedCount} anuncios marcados como eliminados`)
+      }
+      for (const rw of retiredWinners) {
+        await emit(jobDbId, 'progress', `⚠️ Winner retirado: anuncio ${rw.metaAdId} (${rw.daysActive} días activo)`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      await emit(jobDbId, 'error', `Error marcando eliminados: ${msg}`)
+    }
+
+    // Detect launch (5+ new ads)
+    try {
+      const { isLaunch, newAdsCount } = await detectLaunch(competitorId)
+      if (isLaunch) {
+        await emit(jobDbId, 'progress', `🚀 Lanzamiento detectado: ${newAdsCount} anuncios nuevos en los últimos 3 días`)
+      }
+    } catch { /* ignore */ }
   }
 
   // ── Step 1b: Extract real social links from competitor's own website ────────
