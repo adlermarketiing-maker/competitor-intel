@@ -258,27 +258,39 @@ export async function getWinnersByCompetitor(clientId?: string) {
 
 /**
  * Recalculate daysActive and adStatus for ALL existing ads.
+ * Uses cursor-based pagination to avoid loading all ads into memory.
  */
 export async function recalculateAllAdStatuses() {
-  const ads = await db.ad.findMany({
-    select: { id: true, startDate: true, stopDate: true },
-  })
+  let totalUpdated = 0
+  let cursor: string | undefined
 
-  const updates = ads.map((ad) => {
-    const daysActive = computeDaysActive(ad.startDate, ad.stopDate)
-    const adStatus = computeAdStatus(daysActive)
-    return db.ad.update({
-      where: { id: ad.id },
-      data: { daysActive, adStatus },
+  while (true) {
+    const batch = await db.ad.findMany({
+      select: { id: true, startDate: true, stopDate: true },
+      take: 200,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: 'asc' },
     })
-  })
 
-  // Batch in chunks of 100 to avoid transaction size limits
-  for (let i = 0; i < updates.length; i += 100) {
-    await db.$transaction(updates.slice(i, i + 100))
+    if (batch.length === 0) break
+
+    const updates = batch.map((ad) => {
+      const daysActive = computeDaysActive(ad.startDate, ad.stopDate)
+      const adStatus = computeAdStatus(daysActive)
+      return db.ad.update({
+        where: { id: ad.id },
+        data: { daysActive, adStatus },
+      })
+    })
+
+    await db.$transaction(updates)
+    totalUpdated += batch.length
+    cursor = batch[batch.length - 1].id
+
+    if (batch.length < 200) break
   }
 
-  return { updated: ads.length }
+  return { updated: totalUpdated }
 }
 
 export async function getAdStatusCounts(competitorId: string) {

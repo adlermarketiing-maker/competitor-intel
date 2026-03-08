@@ -27,7 +27,12 @@ export async function getMetaToken(): Promise<string | null> {
   }
   const settings = await getSettings()
   if (!settings?.metaToken) return null
-  return decrypt(settings.metaToken)
+  try {
+    return decrypt(settings.metaToken)
+  } catch (err) {
+    console.error('[Settings] Error decrypting Meta token:', err instanceof Error ? err.message : err)
+    return null
+  }
 }
 
 export async function saveCountries(countries: string[]) {

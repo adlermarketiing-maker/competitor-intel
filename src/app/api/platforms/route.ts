@@ -170,12 +170,12 @@ async function scrapePlatform(
         }
 
         saved.push({ platform, title: course.title, url: course.url })
-      } catch {
-        // Skip individual course errors
+      } catch (err) {
+        console.error(`[Platforms] Error processing course "${course.title}" on ${platform}:`, err instanceof Error ? err.message : err)
       }
     }
-  } catch {
-    // Skip platform errors
+  } catch (err) {
+    console.error(`[Platforms] Error scraping platform ${platform}:`, err instanceof Error ? err.message : err)
   }
 
   return saved

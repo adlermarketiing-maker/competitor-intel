@@ -5,7 +5,12 @@ import type { ScrapedPageContent } from '@/types/scrape'
 let browserInstance: Browser | null = null
 
 async function getBrowser(): Promise<Browser> {
-  if (!browserInstance || !browserInstance.connected) {
+  if (browserInstance && !browserInstance.connected) {
+    // Previous browser disconnected — clean up reference
+    try { await browserInstance.close() } catch { /* already dead */ }
+    browserInstance = null
+  }
+  if (!browserInstance) {
     browserInstance = await puppeteer.launch({
       headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
@@ -26,7 +31,7 @@ async function getBrowser(): Promise<Browser> {
 
 export async function closeBrowser(): Promise<void> {
   if (browserInstance) {
-    await browserInstance.close()
+    try { await browserInstance.close() } catch { /* ignore */ }
     browserInstance = null
   }
 }

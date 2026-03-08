@@ -215,9 +215,11 @@ export async function POST(req: NextRequest) {
           orderBy: { adCount: 'desc' },
         })
 
-        // Merge rich data with persisted records
+        // Merge rich data with persisted records (match by pageName+pageId to avoid null collisions)
         const enrichedAdvertisers = savedCompetitors.map((dc) => {
-          const rich = advertisers.find((a) => a.pageId === dc.pageId)
+          const rich = advertisers.find((a) =>
+            a.pageId === dc.pageId && a.pageName === dc.pageName
+          )
           return {
             ...dc,
             landingUrls: rich?.landingUrls ?? [],

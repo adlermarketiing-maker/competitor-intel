@@ -455,12 +455,57 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
 
     // Only delete old landings after successfully scraping new ones
     if (scrapedLandings.length > 0) {
-      await db.landingPage.deleteMany({ where: { competitorId } })
-      for (const { adId, content } of scrapedLandings) {
-        try {
-          await upsertLandingPage(competitorId, adId, content)
-        } catch (err) {
-          console.error(`[Worker] Error saving landing:`, err instanceof Error ? err.message : err)
+      try {
+        await db.$transaction(async (tx) => {
+          await tx.landingPage.deleteMany({ where: { competitorId } })
+          for (const { adId, content } of scrapedLandings) {
+            await tx.landingPage.upsert({
+              where: { url: content.url },
+              update: {
+                competitorId,
+                adId,
+                originalUrl: content.originalUrl,
+                title: content.title,
+                h1Texts: content.h1Texts,
+                h2Texts: content.h2Texts,
+                ctaTexts: content.ctaTexts,
+                prices: content.prices,
+                offerName: content.offerName,
+                bodyText: content.bodyText,
+                screenshotPath: content.screenshotPath,
+                outboundLinks: content.outboundLinks,
+                httpStatus: content.httpStatus,
+                scrapeError: content.error ?? null,
+              },
+              create: {
+                competitorId,
+                adId,
+                url: content.url,
+                originalUrl: content.originalUrl,
+                title: content.title,
+                h1Texts: content.h1Texts,
+                h2Texts: content.h2Texts,
+                ctaTexts: content.ctaTexts,
+                prices: content.prices,
+                offerName: content.offerName,
+                bodyText: content.bodyText,
+                screenshotPath: content.screenshotPath,
+                outboundLinks: content.outboundLinks,
+                httpStatus: content.httpStatus,
+                scrapeError: content.error ?? null,
+              },
+            })
+          }
+        })
+      } catch (err) {
+        console.error(`[Worker] Error saving landings (transaction):`, err instanceof Error ? err.message : err)
+        // Fallback: try individual upserts outside transaction
+        for (const { adId, content } of scrapedLandings) {
+          try {
+            await upsertLandingPage(competitorId, adId, content)
+          } catch (innerErr) {
+            console.error(`[Worker] Error saving landing ${content.url}:`, innerErr instanceof Error ? innerErr.message : innerErr)
+          }
         }
       }
       await emit(jobDbId, 'progress', `${scrapedLandings.length} landings guardadas`)
