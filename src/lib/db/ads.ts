@@ -1,26 +1,29 @@
 import { db } from './client'
 import type { MetaAdRaw } from '@/types/scrape'
 
-/** Calculate ad status based on days active AND whether ad is still running */
-function computeAdStatus(daysActive: number, isActive: boolean): string {
-  // If Meta says the ad is stopped → eliminado
-  if (!isActive) return 'eliminado'
-  // Still running → classify by duration
-  if (daysActive < 3) return 'nuevo'
-  if (daysActive <= 14) return 'activo'
-  return 'winner'
-}
-
 /** Calculate days between two dates */
 function daysBetween(a: Date, b: Date): number {
   return Math.max(0, Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24)))
 }
 
-/** Calculate daysActive using Meta's own dates (startDate/stopDate) */
+/** Calculate daysActive using Meta's own dates (startDate → stopDate, or now if still running) */
 function computeDaysActive(startDate: Date | null, stopDate: Date | null): number {
   if (!startDate) return 0
   const end = stopDate ?? new Date()
   return daysBetween(startDate, end)
+}
+
+/**
+ * Winner status — based ONLY on how many days the ad was active.
+ * Doesn't matter if it's currently running or stopped.
+ *   < 5 days  → "normal"
+ *   5-10 days → "posible_winner"
+ *   > 10 days → "winner"
+ */
+function computeAdStatus(daysActive: number): string {
+  if (daysActive > 10) return 'winner'
+  if (daysActive >= 5) return 'posible_winner'
+  return 'normal'
 }
 
 export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
@@ -28,7 +31,6 @@ export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
     .map((img) => img.resized_image_url || img.original_image_url)
     .filter(Boolean) as string[]
 
-  // Add video preview thumbnails as images (so video ads have a visible thumbnail)
   for (const v of raw.ad_creative_videos || []) {
     if (v.video_preview_image_url) imageUrls.push(v.video_preview_image_url)
   }
@@ -42,7 +44,7 @@ export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
   const stopDate = raw.ad_delivery_stop_time ? new Date(raw.ad_delivery_stop_time) : null
   const isActive = !raw.ad_delivery_stop_time
   const daysActive = computeDaysActive(startDate, stopDate)
-  const adStatus = computeAdStatus(daysActive, isActive)
+  const adStatus = computeAdStatus(daysActive)
 
   const data = {
     competitorId,
@@ -73,21 +75,18 @@ export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
 }
 
 /**
- * Mark ads that were NOT in the latest scrape as "eliminado".
- * Returns info about retired winners for detection alerts.
+ * Mark ads not found in latest scrape — just update lastSeenAt tracking.
+ * Winner status stays based on daysActive.
  */
 export async function markEliminatedAds(competitorId: string, scrapedMetaAdIds: string[]) {
-  const now = new Date()
+  // Nothing to do if no ads were scraped (avoid marking everything)
+  if (scrapedMetaAdIds.length === 0) return { eliminatedCount: 0, retiredWinners: [] }
 
-  // Find all ads for this competitor that were NOT in the current scrape
-  // and are not already marked as eliminated
+  const now = new Date()
   const missingAds = await db.ad.findMany({
     where: {
       competitorId,
-      adStatus: { not: 'eliminado' },
-      ...(scrapedMetaAdIds.length > 0
-        ? { metaAdId: { notIn: scrapedMetaAdIds } }
-        : {}),
+      metaAdId: { notIn: scrapedMetaAdIds },
     },
     select: { id: true, metaAdId: true, startDate: true, stopDate: true, adStatus: true, daysActive: true },
   })
@@ -99,9 +98,10 @@ export async function markEliminatedAds(competitorId: string, scrapedMetaAdIds: 
     if (ad.adStatus === 'winner') {
       retiredWinners.push({ metaAdId: ad.metaAdId, daysActive })
     }
+    // Mark as inactive and update daysActive, but keep winner status
     await db.ad.update({
       where: { id: ad.id },
-      data: { adStatus: 'eliminado', daysActive },
+      data: { isActive: false, daysActive, adStatus: computeAdStatus(daysActive) },
     })
   }
 
@@ -118,7 +118,6 @@ export async function detectLaunch(competitorId: string): Promise<{ isLaunch: bo
   const newAdsCount = await db.ad.count({
     where: {
       competitorId,
-      adStatus: { not: 'eliminado' },
       firstSeenAt: { gte: threeDaysAgo },
     },
   })
@@ -150,7 +149,6 @@ export async function listAds(options: {
     if (maxDays !== undefined) (where.daysActive as Record<string, number>).lte = maxDays
   }
 
-  // Determine sort order
   let orderBy: Record<string, string>[]
   switch (sortBy) {
     case 'daysActive':
@@ -186,13 +184,10 @@ export async function listAds(options: {
 export async function getAdsForCompetitor(competitorId: string) {
   return db.ad.findMany({
     where: { competitorId },
-    orderBy: [{ isActive: 'desc' }, { lastSeenAt: 'desc' }],
+    orderBy: [{ daysActive: 'desc' }, { lastSeenAt: 'desc' }],
   })
 }
 
-/**
- * Get top winners across all competitors or for a specific one.
- */
 export async function getWinnersRanking(options?: { competitorId?: string; limit?: number }) {
   const { competitorId, limit = 50 } = options || {}
 
@@ -209,9 +204,6 @@ export async function getWinnersRanking(options?: { competitorId?: string; limit
   })
 }
 
-/**
- * Get winner stats grouped by competitor.
- */
 export async function getWinnersByCompetitor() {
   const winners = await db.ad.findMany({
     where: { adStatus: 'winner' },
@@ -224,7 +216,6 @@ export async function getWinnersByCompetitor() {
     orderBy: { daysActive: 'desc' },
   })
 
-  // Group by competitor
   const grouped = new Map<string, { competitor: { id: string; name: string }; count: number; maxDays: number; ads: typeof winners }>()
   for (const w of winners) {
     const existing = grouped.get(w.competitorId)
@@ -246,18 +237,17 @@ export async function getWinnersByCompetitor() {
 }
 
 /**
- * Recalculate daysActive and adStatus for ALL ads based on Meta's startDate/stopDate.
- * Used to fix existing ads after the logic change.
+ * Recalculate daysActive and adStatus for ALL existing ads.
  */
 export async function recalculateAllAdStatuses() {
   const ads = await db.ad.findMany({
-    select: { id: true, startDate: true, stopDate: true, isActive: true },
+    select: { id: true, startDate: true, stopDate: true },
   })
 
   let updated = 0
   for (const ad of ads) {
     const daysActive = computeDaysActive(ad.startDate, ad.stopDate)
-    const adStatus = computeAdStatus(daysActive, ad.isActive)
+    const adStatus = computeAdStatus(daysActive)
     await db.ad.update({
       where: { id: ad.id },
       data: { daysActive, adStatus },
@@ -267,16 +257,14 @@ export async function recalculateAllAdStatuses() {
   return { updated }
 }
 
-/**
- * Get ad status counts for a competitor (for UI badges).
- */
 export async function getAdStatusCounts(competitorId: string) {
-  const [nuevo, activo, winner, eliminado, total] = await Promise.all([
-    db.ad.count({ where: { competitorId, adStatus: 'nuevo' } }),
-    db.ad.count({ where: { competitorId, adStatus: 'activo' } }),
+  const [normal, posible_winner, winner, active, inactive, total] = await Promise.all([
+    db.ad.count({ where: { competitorId, adStatus: 'normal' } }),
+    db.ad.count({ where: { competitorId, adStatus: 'posible_winner' } }),
     db.ad.count({ where: { competitorId, adStatus: 'winner' } }),
-    db.ad.count({ where: { competitorId, adStatus: 'eliminado' } }),
+    db.ad.count({ where: { competitorId, isActive: true } }),
+    db.ad.count({ where: { competitorId, isActive: false } }),
     db.ad.count({ where: { competitorId } }),
   ])
-  return { nuevo, activo, winner, eliminado, total }
+  return { normal, posible_winner, winner, active, inactive, total }
 }

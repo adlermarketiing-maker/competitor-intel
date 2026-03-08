@@ -17,7 +17,7 @@ interface CompetitorOption {
   name: string
 }
 
-type StatusFilter = '' | 'nuevo' | 'activo' | 'winner' | 'eliminado'
+type StatusFilter = '' | 'winner' | 'posible_winner'
 type SortOption = '' | 'daysActive' | 'newest' | 'oldest'
 
 export default function AdsPage() {
@@ -26,6 +26,7 @@ export default function AdsPage() {
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([])
   const [competitorId, setCompetitorId] = useState('')
   const [adStatus, setAdStatus] = useState<StatusFilter>('')
+  const [isActiveFilter, setIsActiveFilter] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('')
   const [minDays, setMinDays] = useState('')
   const [maxDays, setMaxDays] = useState('')
@@ -44,6 +45,7 @@ export default function AdsPage() {
     setLoading(true)
     const params = new URLSearchParams({ page: String(page), limit: '24' })
     if (adStatus) params.set('adStatus', adStatus)
+    if (isActiveFilter === 'true' || isActiveFilter === 'false') params.set('isActive', isActiveFilter)
     if (competitorId) params.set('competitorId', competitorId)
     if (sortBy) params.set('sortBy', sortBy)
     if (minDays) params.set('minDays', minDays)
@@ -53,13 +55,14 @@ export default function AdsPage() {
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [adStatus, page, competitorId, sortBy, minDays, maxDays])
+  }, [adStatus, isActiveFilter, page, competitorId, sortBy, minDays, maxDays])
 
-  const hasActiveFilters = competitorId !== '' || adStatus !== '' || sortBy !== '' || minDays !== '' || maxDays !== ''
+  const hasActiveFilters = competitorId !== '' || adStatus !== '' || isActiveFilter !== '' || sortBy !== '' || minDays !== '' || maxDays !== ''
 
   const clearFilters = () => {
     setCompetitorId('')
     setAdStatus('')
+    setIsActiveFilter('')
     setSortBy('')
     setMinDays('')
     setMaxDays('')
@@ -96,20 +99,39 @@ export default function AdsPage() {
           </svg>
         </div>
 
-        {/* Status filter */}
+        {/* Winner filter */}
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
           {([
             { label: 'Todos', value: '' as StatusFilter },
             { label: 'Winners', value: 'winner' as StatusFilter },
-            { label: 'Nuevos', value: 'nuevo' as StatusFilter },
-            { label: 'Activos', value: 'activo' as StatusFilter },
-            { label: 'Eliminados', value: 'eliminado' as StatusFilter },
+            { label: 'Posibles', value: 'posible_winner' as StatusFilter },
           ]).map(({ label, value }) => (
             <button
               key={value}
               onClick={() => { setAdStatus(value); setPage(1) }}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                 adStatus === value
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Active / Inactive filter */}
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+          {([
+            { label: 'Todos', value: '' },
+            { label: 'Activos', value: 'true' },
+            { label: 'Inactivos', value: 'false' },
+          ]).map(({ label, value }) => (
+            <button
+              key={`active-${value}`}
+              onClick={() => { setIsActiveFilter(value); setPage(1) }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                isActiveFilter === value
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}

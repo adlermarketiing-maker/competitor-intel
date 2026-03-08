@@ -14,10 +14,11 @@ import type { ScrapeJob } from '@/types/scrape'
 type MarketAnalysis = any
 
 interface AdStatusCounts {
-  nuevo: number
-  activo: number
+  normal: number
+  posible_winner: number
   winner: number
-  eliminado: number
+  active: number
+  inactive: number
   total: number
 }
 
@@ -30,7 +31,7 @@ interface CompetitorData {
   adStatusCounts: AdStatusCounts
 }
 
-type AdFilter = 'all' | 'nuevo' | 'activo' | 'winner' | 'eliminado'
+type AdFilter = 'all' | 'winners' | 'posible' | 'active' | 'inactive'
 type AdSort = 'recent' | 'daysActive' | 'oldest'
 
 export default function CompetitorProfilePage() {
@@ -128,7 +129,12 @@ export default function CompetitorProfilePage() {
 
   const { competitor, ads, landingPages, latestJob, marketAnalysis, adStatusCounts } = data
 
-  const filteredAds = adFilter === 'all' ? ads : ads.filter((a) => a.adStatus === adFilter)
+  const filteredAds = adFilter === 'all' ? ads
+    : adFilter === 'winners' ? ads.filter((a) => a.adStatus === 'winner')
+    : adFilter === 'posible' ? ads.filter((a) => a.adStatus === 'posible_winner')
+    : adFilter === 'active' ? ads.filter((a) => a.isActive)
+    : adFilter === 'inactive' ? ads.filter((a) => !a.isActive)
+    : ads
 
   const visibleAds = [...filteredAds].sort((a, b) => {
     if (adSort === 'daysActive') return (b.daysActive || 0) - (a.daysActive || 0)
@@ -256,19 +262,20 @@ export default function CompetitorProfilePage() {
             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Anuncios</h2>
             <span className="text-sm text-slate-500">
               {adStatusCounts.total} total
-              {adStatusCounts.winner > 0 && <> · <span className="text-emerald-600 font-semibold">{adStatusCounts.winner} winners</span></>}
+              {adStatusCounts.winner > 0 && <> · <span className="text-amber-600 font-semibold">{adStatusCounts.winner} winners</span></>}
+              {adStatusCounts.posible_winner > 0 && <> · <span className="text-orange-500 font-semibold">{adStatusCounts.posible_winner} posibles</span></>}
             </span>
             <div className="flex-1 h-px bg-slate-100" />
           </div>
 
-          {/* Status filter tabs */}
+          {/* Filter tabs */}
           <div className="flex flex-wrap items-center gap-2 mb-5">
             {([
               { label: 'Todos', value: 'all' as const, count: adStatusCounts.total, color: 'bg-violet-600' },
-              { label: 'Winners', value: 'winner' as const, count: adStatusCounts.winner, color: 'bg-emerald-600' },
-              { label: 'Nuevos', value: 'nuevo' as const, count: adStatusCounts.nuevo, color: 'bg-blue-600' },
-              { label: 'Activos', value: 'activo' as const, count: adStatusCounts.activo, color: 'bg-slate-600' },
-              { label: 'Eliminados', value: 'eliminado' as const, count: adStatusCounts.eliminado, color: 'bg-red-600' },
+              { label: 'Winners', value: 'winners' as const, count: adStatusCounts.winner, color: 'bg-amber-600' },
+              { label: 'Posibles', value: 'posible' as const, count: adStatusCounts.posible_winner, color: 'bg-orange-500' },
+              { label: 'Activos', value: 'active' as const, count: adStatusCounts.active, color: 'bg-emerald-600' },
+              { label: 'Inactivos', value: 'inactive' as const, count: adStatusCounts.inactive, color: 'bg-slate-600' },
             ]).map(({ label, value, count, color }) => (
               <button
                 key={value}

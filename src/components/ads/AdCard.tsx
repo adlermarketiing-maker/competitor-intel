@@ -7,17 +7,9 @@ interface AdCardProps {
   showCompetitor?: boolean
 }
 
-const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
-  nuevo: { label: 'Nuevo', bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500' },
-  activo: { label: 'Activo', bg: 'bg-slate-100', text: 'text-slate-600', dot: 'bg-slate-400' },
-  winner: { label: 'Winner', bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  eliminado: { label: 'Eliminado', bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500' },
-}
-
 export default function AdCard({ ad, showCompetitor = false }: AdCardProps) {
   const primaryCopy = ad.adCopyBodies[0] || ''
   const thumbUrl = ad.imageUrls[0] || ad.videoUrls[0] || null
-  const status = STATUS_CONFIG[ad.adStatus] || STATUS_CONFIG.activo
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
@@ -37,15 +29,29 @@ export default function AdCard({ ad, showCompetitor = false }: AdCardProps) {
           </svg>
         )}
 
-        {/* Status badge overlay on thumbnail */}
-        <div className="absolute top-2 left-2">
-          <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg shadow-sm ${status.bg} ${status.text}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-            {status.label}
-            {(ad.adStatus === 'winner' || ad.adStatus === 'eliminado') && ad.daysActive > 0 && (
-              <span className="font-semibold ml-0.5">&middot; {ad.daysActive}d</span>
-            )}
+        {/* Badges on thumbnail */}
+        <div className="absolute top-2 left-2 flex flex-col gap-1">
+          {/* Active / Inactive badge */}
+          <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg shadow-sm ${
+            ad.isActive
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-slate-200 text-slate-600'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${ad.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+            {ad.isActive ? 'Activo' : 'Inactivo'}
           </span>
+
+          {/* Winner badge — only if >= 5 days */}
+          {ad.adStatus === 'winner' && (
+            <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg shadow-sm bg-amber-100 text-amber-800">
+              Winner &middot; {ad.daysActive}d
+            </span>
+          )}
+          {ad.adStatus === 'posible_winner' && (
+            <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg shadow-sm bg-orange-100 text-orange-700">
+              Posible Winner &middot; {ad.daysActive}d
+            </span>
+          )}
         </div>
       </div>
 
@@ -55,8 +61,8 @@ export default function AdCard({ ad, showCompetitor = false }: AdCardProps) {
           <p className="text-xs font-semibold text-violet-600 mb-1">{ad.competitor.name}</p>
         )}
 
-        {/* Days active info */}
-        <div className="flex items-center gap-2 mb-2">
+        {/* Platforms + dates */}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           {ad.platforms.length > 0 && (
             <span className="text-xs text-slate-400">{ad.platforms.join(', ')}</span>
           )}
