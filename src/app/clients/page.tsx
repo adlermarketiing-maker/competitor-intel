@@ -11,6 +11,7 @@ export default function ClientsPage() {
   const [editing, setEditing] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
   const nameRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState({
@@ -109,6 +110,30 @@ export default function ClientsPage() {
     resetForm()
   }
 
+  const handleAnalyze = async () => {
+    if (!form.websiteUrl.trim()) return
+    setAnalyzing(true)
+    try {
+      const res = await fetch('/api/clients/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl: form.websiteUrl.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setForm((f) => ({
+        ...f,
+        niche: data.niche || f.niche,
+        description: data.description || f.description,
+        avatarDesc: data.avatarDesc || f.avatarDesc,
+      }))
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al analizar')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -160,12 +185,38 @@ export default function ClientsPage() {
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-500 block mb-1">Website</label>
-              <input
-                value={form.websiteUrl}
-                onChange={(e) => setForm((f) => ({ ...f, websiteUrl: e.target.value }))}
-                placeholder="https://..."
-                className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
-              />
+              <div className="flex gap-2">
+                <input
+                  value={form.websiteUrl}
+                  onChange={(e) => setForm((f) => ({ ...f, websiteUrl: e.target.value }))}
+                  placeholder="https://..."
+                  className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleAnalyze}
+                  disabled={analyzing || !form.websiteUrl.trim()}
+                  className="h-10 px-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors whitespace-nowrap flex items-center gap-1.5"
+                  title="Analizar web con IA para auto-rellenar nicho, descripción y avatar"
+                >
+                  {analyzing ? (
+                    <>
+                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Analizando...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Auto-rellenar
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-semibold text-slate-500 block mb-1">Descripción del negocio</label>
