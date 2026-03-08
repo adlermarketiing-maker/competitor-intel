@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchAdsForCompetitor } from '@/lib/meta/adLibrary'
-import { getMetaToken } from '@/lib/db/settings'
+import { searchAdsByKeyword } from '@/lib/meta/adLibraryApi'
 import { getSettings } from '@/lib/db/settings'
 import { db } from '@/lib/db/client'
 import type { MetaAdRaw } from '@/types/scrape'
@@ -14,9 +13,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Keywords requeridas' }, { status: 400 })
     }
 
-    const token = await getMetaToken()
-    if (!token) {
-      return NextResponse.json({ error: 'Token de Meta no configurado. Ve a Configuración.' }, { status: 400 })
+    const apiKey = process.env.SEARCHAPI_KEY
+    if (!apiKey) {
+      return NextResponse.json({ error: 'SEARCHAPI_KEY no configurada. Añádela en Railway.' }, { status: 400 })
     }
 
     const settings = await getSettings()
@@ -24,11 +23,10 @@ export async function POST(req: NextRequest) {
       ? countries
       : (settings?.countries ?? ['ES', 'MX', 'AR', 'CO'])
 
-    // Search Meta Ad Library by keywords
-    const ads = await fetchAdsForCompetitor(token, {
-      searchTerms: keywords.trim(),
-      countries: effectiveCountries,
+    // Search Meta Ad Library by keywords directly (not by page name)
+    const ads = await searchAdsByKeyword(apiKey, keywords.trim(), effectiveCountries, {
       activeStatus: 'ACTIVE',
+      maxAds: 200,
     })
 
     // Group ads by page_id / page_name to discover unique advertisers

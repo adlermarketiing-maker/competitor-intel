@@ -143,6 +143,84 @@ export async function findPageId(
   }
 }
 
+/**
+ * Search ads by keyword across countries.
+ * Unlike fetchAdsViaSearchApi, this does NOT resolve a page_id first —
+ * it searches by `search_terms` directly, which is what "Discover" needs.
+ */
+export async function searchAdsByKeyword(
+  apiKey: string,
+  keywords: string,
+  countries: string[],
+  options?: { maxAds?: number; activeStatus?: string; onLog?: (msg: string) => void }
+): Promise<MetaAdRaw[]> {
+  const maxAds = options?.maxAds ?? 200
+  const allAds: MetaAdRaw[] = []
+  const log = options?.onLog ?? ((msg: string) => console.log(msg))
+
+  // Search across each country (SearchAPI only accepts one country at a time)
+  // Group into batches to avoid too many requests
+  const countriesToSearch = countries.length > 0 ? countries : ['ALL']
+
+  // Limit to first 5 countries to avoid burning API credits
+  const limitedCountries = countriesToSearch.slice(0, 5)
+
+  for (const country of limitedCountries) {
+    if (allAds.length >= maxAds) break
+
+    const params: Record<string, string> = {
+      engine: 'meta_ad_library',
+      api_key: apiKey,
+      ad_type: 'all',
+      active_status: (options?.activeStatus ?? 'active').toLowerCase(),
+      country,
+      search_terms: keywords,
+    }
+
+    log(`Buscando anuncios con "${keywords}" en ${country}...`)
+
+    let pageNum = 0
+    const maxPages = 3 // Limit pages per country for discover
+
+    while (pageNum < maxPages && allAds.length < maxAds) {
+      pageNum++
+      try {
+        const { data } = await axios.get<SearchApiResponse>(SEARCHAPI_URL, { params })
+
+        if (data.error) {
+          if (data.error.toLowerCase().includes('no results') || data.error.toLowerCase().includes('didn\'t return')) {
+            break
+          }
+          log(`Error en ${country}: ${data.error}`)
+          break
+        }
+
+        if (!data.ads || data.ads.length === 0) break
+
+        for (const ad of data.ads) {
+          if (ad.ad_archive_id) {
+            allAds.push(mapAd(ad))
+            if (allAds.length >= maxAds) break
+          }
+        }
+
+        if (!data.pagination?.next_page_token) break
+        params.next_page_token = data.pagination.next_page_token
+      } catch (err) {
+        if (axios.isAxiosError(err) && err.response?.status === 429) {
+          log(`Rate limited en ${country}, continuando...`)
+          break
+        }
+        log(`Error en ${country}: ${err instanceof Error ? err.message : String(err)}`)
+        break
+      }
+    }
+  }
+
+  log(`✓ ${allAds.length} anuncios encontrados en total`)
+  return allAds
+}
+
 export async function fetchAdsViaSearchApi(
   apiKey: string,
   options: FetchAdsApiOptions
