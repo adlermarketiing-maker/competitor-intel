@@ -1,8 +1,11 @@
 import { db } from './client'
 import type { MetaAdRaw } from '@/types/scrape'
 
-/** Calculate ad status based on days active */
-function computeAdStatus(daysActive: number): string {
+/** Calculate ad status based on days active AND whether ad is still running */
+function computeAdStatus(daysActive: number, isActive: boolean): string {
+  // If Meta says the ad is stopped → eliminado
+  if (!isActive) return 'eliminado'
+  // Still running → classify by duration
   if (daysActive < 3) return 'nuevo'
   if (daysActive <= 14) return 'activo'
   return 'winner'
@@ -37,8 +40,9 @@ export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
   const now = new Date()
   const startDate = raw.ad_delivery_start_time ? new Date(raw.ad_delivery_start_time) : null
   const stopDate = raw.ad_delivery_stop_time ? new Date(raw.ad_delivery_stop_time) : null
+  const isActive = !raw.ad_delivery_stop_time
   const daysActive = computeDaysActive(startDate, stopDate)
-  const adStatus = computeAdStatus(daysActive)
+  const adStatus = computeAdStatus(daysActive, isActive)
 
   const data = {
     competitorId,
@@ -53,7 +57,7 @@ export async function upsertAd(competitorId: string, raw: MetaAdRaw) {
     platforms: raw.publisher_platforms || [],
     pageId: raw.page_id ?? null,
     pageName: raw.page_name ?? null,
-    isActive: !raw.ad_delivery_stop_time,
+    isActive,
     startDate,
     stopDate,
     lastSeenAt: now,
@@ -247,16 +251,16 @@ export async function getWinnersByCompetitor() {
  */
 export async function recalculateAllAdStatuses() {
   const ads = await db.ad.findMany({
-    select: { id: true, startDate: true, stopDate: true, adStatus: true },
+    select: { id: true, startDate: true, stopDate: true, isActive: true },
   })
 
   let updated = 0
   for (const ad of ads) {
     const daysActive = computeDaysActive(ad.startDate, ad.stopDate)
-    const newStatus = ad.adStatus === 'eliminado' ? 'eliminado' : computeAdStatus(daysActive)
+    const adStatus = computeAdStatus(daysActive, ad.isActive)
     await db.ad.update({
       where: { id: ad.id },
-      data: { daysActive, adStatus: newStatus },
+      data: { daysActive, adStatus },
     })
     updated++
   }
