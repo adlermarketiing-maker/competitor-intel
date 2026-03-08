@@ -86,8 +86,15 @@ export async function POST(req: NextRequest) {
     // Limit to 200 reviews to avoid token limits
     if (reviews.length > 200) reviews = reviews.slice(0, 200)
 
+    // Get competitor name if filtering by competitor
+    let competitorName: string | undefined
+    if (competitorId) {
+      const comp = await db.competitor.findUnique({ where: { id: competitorId }, select: { name: true } })
+      competitorName = comp?.name ?? undefined
+    }
+
     const analysis = await analyzeReviews(reviews, {
-      competitorName: competitorId ? undefined : undefined,
+      competitorName,
       keywords: keywords?.trim(),
     })
 

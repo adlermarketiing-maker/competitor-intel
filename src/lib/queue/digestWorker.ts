@@ -29,7 +29,7 @@ async function processDigestJob(job: Job<DigestJobData>): Promise<void> {
     return
   }
 
-  const { sendTelegramMessage } = await import('@/lib/telegram/client')
+  const { sendTelegramMessage, escHtml } = await import('@/lib/telegram/client')
   const { buildDailyDigest, buildWeeklyDigest, generateDigestInsight } = await import('@/lib/telegram/digest')
 
   const { type } = job.data
@@ -38,22 +38,27 @@ async function processDigestJob(job: Job<DigestJobData>): Promise<void> {
 
   let message: string | null = null
 
-  if (type === 'weekly') {
-    message = await buildWeeklyDigest()
-  } else {
-    message = await buildDailyDigest()
+  try {
+    if (type === 'weekly') {
+      message = await buildWeeklyDigest()
+    } else {
+      message = await buildDailyDigest()
 
-    // Append AI insight to daily digest
-    if (message && process.env.ANTHROPIC_API_KEY) {
-      try {
-        const insight = await generateDigestInsight()
-        if (insight) {
-          message += `\n💡 <b>INSIGHT DEL DÍA:</b>\n"${insight}"`
+      // Append AI insight to daily digest
+      if (message && process.env.ANTHROPIC_API_KEY) {
+        try {
+          const insight = await generateDigestInsight()
+          if (insight) {
+            message += `\n💡 <b>INSIGHT DEL DÍA:</b>\n"${escHtml(insight)}"`
+          }
+        } catch (err) {
+          console.error('[Digest] Error generating AI insight:', err)
         }
-      } catch (err) {
-        console.error('[Digest] Error generating AI insight:', err)
       }
     }
+  } catch (err) {
+    console.error(`[Digest] Error building ${type} digest:`, err)
+    return
   }
 
   if (!message) {
@@ -61,8 +66,12 @@ async function processDigestJob(job: Job<DigestJobData>): Promise<void> {
     return
   }
 
-  await sendTelegramMessage(message)
-  console.log(`[Digest] ${type} digest sent (${message.length} chars)`)
+  try {
+    await sendTelegramMessage(message)
+    console.log(`[Digest] ${type} digest sent (${message.length} chars)`)
+  } catch (err) {
+    console.error('[Digest] Error sending Telegram message:', err)
+  }
 }
 
 export function startDigestWorker() {

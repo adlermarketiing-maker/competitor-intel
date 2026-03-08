@@ -6,7 +6,7 @@ import { extractYouTubeTranscript } from './youtubeOrganic'
  * Strategy:
  *   1. YouTube: Try extracting auto-captions first (free, no API key needed)
  *   2. Fallback: Use OpenAI Whisper API if OPENAI_API_KEY is configured
- *      - Downloads audio via yt-dlp (if installed) or Puppeteer
+ *      - Downloads audio via yt-dlp (if installed)
  *      - Sends to Whisper for transcription
  *
  * Only transcribes the first ~2 minutes for hooks.
@@ -20,7 +20,6 @@ export async function transcribeVideo(
     try {
       const transcript = await extractYouTubeTranscript(videoUrl)
       if (transcript && transcript.length > 20) {
-        // Only return first ~2 minutes worth of text (roughly 300 words)
         const words = transcript.split(/\s+/)
         return words.slice(0, 300).join(' ')
       }
@@ -37,7 +36,7 @@ export async function transcribeVideo(
   }
 
   try {
-    const audioBuffer = await downloadAudio(videoUrl, platform)
+    const audioBuffer = await downloadAudio(videoUrl)
     if (!audioBuffer) return null
 
     return await whisperTranscribe(audioBuffer, apiKey)
@@ -48,49 +47,69 @@ export async function transcribeVideo(
 }
 
 /**
+ * Validate URL to prevent command injection.
+ */
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return ['http:', 'https:'].includes(parsed.protocol)
+  } catch {
+    return false
+  }
+}
+
+/**
  * Download audio from a video URL using yt-dlp (if available).
  */
-async function downloadAudio(
-  url: string,
-  platform: string,
-): Promise<Buffer | null> {
-  const { execSync } = await import('child_process')
-  const { readFileSync, unlinkSync, existsSync } = await import('fs')
+async function downloadAudio(url: string): Promise<Buffer | null> {
+  if (!isValidUrl(url)) {
+    console.error('[Transcribe] Invalid URL, skipping download')
+    return null
+  }
+
+  const { execFileSync, execSync } = await import('child_process')
+  const { readFileSync, unlinkSync, existsSync, readdirSync } = await import('fs')
   const { join } = await import('path')
   const { tmpdir } = await import('os')
 
-  const tmpFile = join(tmpdir(), `transcribe_${Date.now()}.mp3`)
+  const timestamp = Date.now()
+  const tmpBase = join(tmpdir(), `transcribe_${timestamp}`)
+  const tmpFile = `${tmpBase}.mp3`
 
   try {
     // Check if yt-dlp is installed
     try {
       execSync('which yt-dlp', { stdio: 'pipe' })
     } catch {
-      console.log(`[Transcribe] yt-dlp not installed. Install with: brew install yt-dlp`)
+      console.log('[Transcribe] yt-dlp not installed. Install with: brew install yt-dlp')
       return null
     }
 
-    // Download audio only, max 120 seconds
-    const cmd = platform === 'tiktok'
-      ? `yt-dlp --no-check-certificate -x --audio-format mp3 --postprocessor-args "-t 120" -o "${tmpFile}" "${url}" 2>&1`
-      : `yt-dlp --no-check-certificate -x --audio-format mp3 --download-sections "*0:00-2:00" -o "${tmpFile}" "${url}" 2>&1`
+    // Use execFileSync to avoid shell injection — pass args as array
+    const args = [
+      '--no-check-certificate',
+      '-x',
+      '--audio-format', 'mp3',
+      '--download-sections', '*0:00-2:00',
+      '-o', tmpFile,
+      url,
+    ]
 
-    execSync(cmd, { timeout: 60000, stdio: 'pipe' })
+    execFileSync('yt-dlp', args, { timeout: 60000, stdio: 'pipe' })
 
-    // The output file might have a different extension
-    const possibleFile = tmpFile.replace('.mp3', '.mp3')
-    if (existsSync(possibleFile)) {
-      const buffer = readFileSync(possibleFile)
-      unlinkSync(possibleFile)
+    // yt-dlp might output with slightly different name/extension
+    if (existsSync(tmpFile)) {
+      const buffer = readFileSync(tmpFile)
+      unlinkSync(tmpFile)
       return buffer
     }
 
-    // Try with the base name (yt-dlp might add extension)
-    const baseFile = tmpFile.replace('.mp3', '')
-    const glob = await import('fs')
-    const files = glob.readdirSync(tmpdir()).filter((f: string) => f.startsWith(`transcribe_${Date.now()}`))
+    // Scan for files matching our timestamp prefix
+    const prefix = `transcribe_${timestamp}`
+    const dir = tmpdir()
+    const files = readdirSync(dir).filter((f) => f.startsWith(prefix))
     for (const f of files) {
-      const fp = join(tmpdir(), f)
+      const fp = join(dir, f)
       const buffer = readFileSync(fp)
       unlinkSync(fp)
       return buffer
@@ -99,8 +118,15 @@ async function downloadAudio(
     return null
   } catch (err) {
     console.error('[Transcribe] yt-dlp error:', err instanceof Error ? err.message : err)
-    // Clean up
-    try { if (existsSync(tmpFile)) unlinkSync(tmpFile) } catch { /* ignore */ }
+    // Clean up any leftover temp files
+    try {
+      const prefix = `transcribe_${timestamp}`
+      const dir = tmpdir()
+      const files = readdirSync(dir).filter((f) => f.startsWith(prefix))
+      for (const f of files) {
+        try { unlinkSync(join(dir, f)) } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
     return null
   }
 }
@@ -148,7 +174,6 @@ export async function batchTranscribe(
 ): Promise<Map<string, string>> {
   const transcripts = new Map<string, string>()
 
-  // Sort by views and take top N
   const sorted = [...posts]
     .sort((a, b) => b.views - a.views)
     .slice(0, topN)
@@ -159,7 +184,6 @@ export async function batchTranscribe(
     if (transcript) {
       transcripts.set(post.externalId, transcript)
     }
-    // Rate limit
     await new Promise((r) => setTimeout(r, 2000))
   }
 

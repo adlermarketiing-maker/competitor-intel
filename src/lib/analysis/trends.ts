@@ -167,13 +167,19 @@ Genera entre 3 y 8 oportunidades, priorizando las más accionables.`
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
     }
 
-    const insights = JSON.parse(jsonStr) as Array<{
+    let insights: Array<{
       type: string
       title: string
       description: string
       source: string
       urgency: string
     }>
+    try {
+      insights = JSON.parse(jsonStr)
+    } catch {
+      console.error('[Trends] Failed to parse Claude response as JSON:', jsonStr.slice(0, 200))
+      return []
+    }
 
     return insights.map((i) => ({
       type: i.type as TrendInsight['type'],

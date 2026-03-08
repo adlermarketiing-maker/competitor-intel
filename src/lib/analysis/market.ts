@@ -99,7 +99,12 @@ INSTRUCCIONES:
     jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
   }
 
-  const result = JSON.parse(jsonStr) as MarketAnalysisResult
+  let result: MarketAnalysisResult
+  try {
+    result = JSON.parse(jsonStr) as MarketAnalysisResult
+  } catch {
+    throw new Error(`Failed to parse Claude response as JSON. Raw response: ${jsonStr.slice(0, 200)}`)
+  }
 
   // Ensure all fields exist with defaults
   return {

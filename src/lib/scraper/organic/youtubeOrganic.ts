@@ -298,17 +298,21 @@ export async function extractYouTubeTranscript(videoUrl: string): Promise<string
 
     if (transcript) {
       // Fetch the caption XML
-      const captionPage = await browser.newPage()
-      await captionPage.goto(transcript, { waitUntil: 'domcontentloaded', timeout: 15000 })
-      const captionText = await captionPage.evaluate(() => {
-        const texts = Array.from(document.querySelectorAll('text'))
-        return texts.map((t) => t.textContent?.trim()).filter(Boolean).join(' ')
-      })
-      await captionPage.close()
-      return captionText || null
+      let captionPage: Awaited<ReturnType<typeof browser.newPage>> | null = null
+      try {
+        captionPage = await browser.newPage()
+        await captionPage.goto(transcript, { waitUntil: 'domcontentloaded', timeout: 15000 })
+        const captionText = await captionPage.evaluate(() => {
+          const texts = Array.from(document.querySelectorAll('text'))
+          return texts.map((t) => t.textContent?.trim()).filter(Boolean).join(' ')
+        })
+        return captionText || null
+      } finally {
+        if (captionPage) await captionPage.close().catch(() => {})
+      }
     }
   } catch {
-    // Silently fail
+    // Caption extraction failed
   } finally {
     await page.close()
     await browser.close()

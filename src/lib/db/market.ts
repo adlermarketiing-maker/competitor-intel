@@ -126,17 +126,20 @@ export function compareAnalyses(
   const prevFear = prevItems(previous.fears)
   const prevDes = prevItems(previous.desires)
 
-  const newPhrases = current.phrases.filter(
-    (p) => !previous.phrases.some((pp) => pp.toLowerCase() === p.toLowerCase())
+  const prevPhrases = previous.phrases || []
+  const currPhrases = current.phrases || []
+
+  const newPhrases = currPhrases.filter(
+    (p) => !prevPhrases.some((pp) => pp.toLowerCase() === p.toLowerCase())
   )
-  const removedPhrases = previous.phrases.filter(
-    (p) => !current.phrases.some((cp) => cp.toLowerCase() === p.toLowerCase())
+  const removedPhrases = prevPhrases.filter(
+    (p) => !currPhrases.some((cp) => cp.toLowerCase() === p.toLowerCase())
   )
 
   // Awareness level shifts > 10 points
   const awarenessShift: MarketChanges['awarenessShift'] = []
   const prevAwareness = (previous.awarenessLevel || {}) as Record<string, number>
-  const currAwareness = current.awarenessLevel as Record<string, number>
+  const currAwareness = (current.awarenessLevel || {}) as Record<string, number>
   for (const level of ['unaware', 'problemAware', 'solutionAware', 'productAware', 'mostAware']) {
     const oldPct = prevAwareness[level] ?? 0
     const newPct = currAwareness[level] ?? 0

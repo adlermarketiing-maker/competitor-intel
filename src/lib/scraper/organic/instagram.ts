@@ -69,9 +69,16 @@ export async function scrapeInstagramProfile(
 
     // Dismiss login popup if it appears
     try {
-      const notNow = await page.$('button:has-text("Not Now"), button:has-text("Ahora no"), [role="button"][tabindex="0"]')
-      if (notNow) await notNow.click()
-      await new Promise((r) => setTimeout(r, 1000))
+      const dismissed = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, [role="button"]'))
+        const notNow = buttons.find((b) => {
+          const text = b.textContent?.trim().toLowerCase() || ''
+          return text === 'not now' || text === 'ahora no' || text === 'not now'
+        })
+        if (notNow) { (notNow as HTMLElement).click(); return true }
+        return false
+      })
+      if (dismissed) await new Promise((r) => setTimeout(r, 1000))
     } catch { /* ignore */ }
 
     // Extract profile info
@@ -131,8 +138,9 @@ export async function scrapeInstagramProfile(
 
     // Visit each post to get details
     for (const link of postLinks.slice(0, maxPosts)) {
+      let postPage: Awaited<ReturnType<typeof browser.newPage>> | null = null
       try {
-        const postPage = await browser.newPage()
+        postPage = await browser.newPage()
         await postPage.setUserAgent(
           'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
         )
@@ -151,7 +159,6 @@ export async function scrapeInstagramProfile(
           const descMeta = metas.find((m) => m.getAttribute('property') === 'og:description')
           if (descMeta) {
             const desc = descMeta.getAttribute('content') || ''
-            // Format: "X likes, Y comments - Author: Caption"
             const likeMatch = desc.match(/([\d,]+)\s*(?:likes|Me gusta)/i)
             const commentMatch = desc.match(/([\d,]+)\s*(?:comments|comentarios)/i)
             if (likeMatch) likes = parseInt(likeMatch[1].replace(/,/g, '')) || 0
@@ -161,21 +168,15 @@ export async function scrapeInstagramProfile(
             if (captionMatch) caption = captionMatch[1].trim()
           }
 
-          // Published date from time element
           const timeEl = document.querySelector('time[datetime]')
           if (timeEl) publishedAt = timeEl.getAttribute('datetime')
 
           return { caption, likes, comments, publishedAt }
         })
 
-        // Extract shortcode from URL
         const shortcodeMatch = link.href.match(/\/(?:p|reel)\/([\w-]+)/)
         const shortcode = shortcodeMatch?.[1] || ''
-
-        // Extract hashtags from caption
         const hashtags = (postData.caption || '').match(/#\w+/g)?.map((h) => h.toLowerCase()) || []
-
-        // Detect carousel (multiple images in the same post)
         const isCarousel = await postPage.$('.swipe-indicator, [aria-label*="Carousel"], [aria-label*="carrusel"]') !== null
 
         let mediaType: 'image' | 'carousel' | 'reel' = 'image'
@@ -193,10 +194,10 @@ export async function scrapeInstagramProfile(
           thumbnailUrl: link.thumbnail,
           publishedAt: postData.publishedAt,
         })
-
-        await postPage.close()
       } catch {
         // Skip individual post errors
+      } finally {
+        if (postPage) await postPage.close().catch(() => {})
       }
 
       // Rate limit between posts

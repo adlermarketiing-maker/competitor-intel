@@ -228,7 +228,8 @@ export async function calculateViralStatus(authorHandle: string, platform: strin
 
   // Calculate average engagement
   const avgEngagement = posts.reduce((sum, p) => sum + p.likes + p.comments, 0) / posts.length
-  const avgFollowers = posts[0]?.followers || 1
+  // Use the max followers value across posts (all should be same profile)
+  const avgFollowers = Math.max(...posts.map((p) => p.followers), 1)
 
   for (const post of posts) {
     const totalEngagement = post.likes + post.comments

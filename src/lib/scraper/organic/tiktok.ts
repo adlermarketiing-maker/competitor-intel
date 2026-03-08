@@ -164,8 +164,9 @@ export async function searchTikTok(keyword: string, maxVideos = 20): Promise<Tik
 
     // Visit top videos to get more details (comments, shares, sound, duration)
     for (const video of videos.slice(0, 10)) {
+      let videoPage: Awaited<ReturnType<typeof browser.newPage>> | null = null
       try {
-        const videoPage = await browser.newPage()
+        videoPage = await browser.newPage()
         await videoPage.setUserAgent(
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         )
@@ -199,10 +200,11 @@ export async function searchTikTok(keyword: string, maxVideos = 20): Promise<Tik
         video.soundName = details.soundName
         video.duration = details.duration
 
-        await videoPage.close()
         await new Promise((r) => setTimeout(r, 1000))
       } catch {
         // Skip individual video detail errors
+      } finally {
+        if (videoPage) await videoPage.close().catch(() => {})
       }
     }
   } catch (err) {

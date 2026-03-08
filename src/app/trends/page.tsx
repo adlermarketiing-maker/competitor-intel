@@ -297,7 +297,9 @@ export default function TrendsPage() {
         setPosts(data)
         setTotal(data.length)
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('[Trends] Error fetching posts:', err)
+    }
     setLoading(false)
   }, [platformFilter, competitorFilter, viralOnly])
 
@@ -306,7 +308,9 @@ export default function TrendsPage() {
       const res = await fetch('/api/trends/opportunities')
       const data = await res.json()
       if (Array.isArray(data)) setOpportunities(data)
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('[Trends] Error fetching opportunities:', err)
+    }
   }, [])
 
   useEffect(() => {
@@ -339,7 +343,9 @@ export default function TrendsPage() {
       } else {
         await fetchPosts()
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('[Trends] Error scraping:', err)
+    }
     setScraping(false)
   }
 
@@ -352,7 +358,9 @@ export default function TrendsPage() {
         body: JSON.stringify({ action: 'generate' }),
       })
       await fetchOpportunities()
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('[Trends] Error generating opportunities:', err)
+    }
     setGenerating(false)
   }
 
