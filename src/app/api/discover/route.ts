@@ -153,19 +153,20 @@ export async function POST(req: NextRequest) {
           advertisersFound: filtered.length,
         })
 
-        // Build advertiser data
+        // Build advertiser data — keep rich data light for the SSE payload
         const advertisers = filtered.map((a) => ({
           pageId: a.pageId,
           pageName: a.pageName,
           adCount: a.ads.length,
-          sampleCopy: a.adCopies[0] ?? null,
+          sampleCopy: (a.adCopies[0] ?? '').slice(0, 200) || null,
           sampleLandingUrl: [...a.landingUrls][0] ?? null,
-          landingUrls: [...a.landingUrls].slice(0, 5),
-          adCopies: a.adCopies.slice(0, 5),
-          adImages: a.adImages.slice(0, 5),
+          landingUrls: [...a.landingUrls].slice(0, 3),
+          adCopies: a.adCopies.slice(0, 3).map((c) => c.slice(0, 200)),
+          adImages: a.adImages.slice(0, 3),
         }))
 
         // Persist: create search first, then batch-insert discovered competitors
+        console.log(`[Discover] Saving ${advertisers.length} advertisers to DB...`)
         const search = await db.keywordSearch.create({
           data: {
             keywords: keywords.trim(),
@@ -174,7 +175,7 @@ export async function POST(req: NextRequest) {
           },
         })
 
-        // Batch insert in chunks of 50 to avoid Prisma timeout
+        // Batch insert in chunks of 50
         const BATCH_SIZE = 50
         for (let i = 0; i < advertisers.length; i += BATCH_SIZE) {
           const batch = advertisers.slice(i, i + BATCH_SIZE)
@@ -188,7 +189,14 @@ export async function POST(req: NextRequest) {
               sampleLandingUrl: a.sampleLandingUrl,
             })),
           })
+          send('progress', {
+            message: `Guardando... ${Math.min(i + BATCH_SIZE, advertisers.length)}/${advertisers.length}`,
+            adsScanned: 0,
+            advertisersFound: advertisers.length,
+          })
         }
+
+        console.log(`[Discover] DB save complete. Fetching records...`)
 
         // Fetch persisted records to get IDs
         const savedCompetitors = await db.discoveredCompetitor.findMany({
@@ -207,6 +215,8 @@ export async function POST(req: NextRequest) {
           }
         })
 
+        console.log(`[Discover] Sending done event with ${enrichedAdvertisers.length} advertisers`)
+
         send('done', {
           searchId: search.id,
           keywords: search.keywords,
@@ -215,6 +225,7 @@ export async function POST(req: NextRequest) {
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
+        console.error(`[Discover] Error:`, err)
         send('error', { error: msg })
       } finally {
         controller.close()
