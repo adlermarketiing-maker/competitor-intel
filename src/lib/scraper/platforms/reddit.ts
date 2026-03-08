@@ -53,8 +53,8 @@ export async function searchReddit(keyword: string, maxPosts = 8): Promise<Reddi
         description: (post.selftext || '').slice(0, 300) || null,
       })
     }
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Reddit] Error searching "${keyword}":`, err instanceof Error ? err.message : err)
   }
 
   return posts.slice(0, maxPosts)
@@ -98,8 +98,8 @@ export async function scrapeRedditComments(postUrl: string, maxComments = 20): P
 
       if (comments.length >= maxComments) break
     }
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Reddit] Error scraping comments:`, err instanceof Error ? err.message : err)
   }
 
   return comments

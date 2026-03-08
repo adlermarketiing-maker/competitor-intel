@@ -9,8 +9,8 @@ export async function GET(req: NextRequest) {
     const platform = searchParams.get('platform') || undefined
     const competitorId = searchParams.get('competitorId') || undefined
     const viral = searchParams.get('viral')
-    const daysBack = parseInt(searchParams.get('daysBack') || '30')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const daysBack = Math.max(1, parseInt(searchParams.get('daysBack') || '30') || 30)
+    const limit = Math.max(1, Math.min(200, parseInt(searchParams.get('limit') || '50') || 50))
 
     if (view === 'virals') {
       const virals = await getViralPosts(daysBack, limit)

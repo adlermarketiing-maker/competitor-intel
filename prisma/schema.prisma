@@ -100,6 +100,8 @@ model Ad {
   @@index([hookType])
   @@index([marketingAngle])
   @@index([aiScore])
+  @@index([competitorId, isActive])
+  @@index([competitorId, adStatus])
 }
 
 // A scraped landing page
@@ -298,6 +300,8 @@ model OrganicPost {
   @@index([competitorId])
   @@index([isViral])
   @@index([publishedAt])
+  @@index([authorHandle, platform])
+  @@index([platform, scrapedAt])
 }
 
 // Cross-analysis opportunities (organic trends vs ads)

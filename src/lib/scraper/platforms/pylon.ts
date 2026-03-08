@@ -72,8 +72,8 @@ export async function searchPylon(keyword: string, maxProducts = 8): Promise<Pyl
     }, maxProducts)
 
     products.push(...results)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Pylon] Error searching "${keyword}":`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()
@@ -115,8 +115,8 @@ export async function scrapePylonComments(productUrl: string, maxComments = 20):
     }, maxComments)
 
     comments.push(...reviews)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Pylon] Error scraping comments:`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()

@@ -80,6 +80,7 @@ export default function DiscoverPage() {
   }
 
   const loadFromHistory = (item: HistoryItem) => {
+    setError(null)
     setResult({
       searchId: item.id,
       keywords: item.keywords,

@@ -183,8 +183,9 @@ export async function fetchAdsViaSearchApi(
   log(`Buscando anuncios de página ${pageId}...`)
 
   let pageNum = 0
+  const maxPages = 50
 
-  while (true) {
+  while (pageNum < maxPages) {
     pageNum++
     let response: SearchApiResponse
 
@@ -248,6 +249,10 @@ export async function fetchAdsViaSearchApi(
     }
 
     params.next_page_token = response.pagination.next_page_token
+  }
+
+  if (pageNum >= maxPages) {
+    log(`Límite de paginación alcanzado (${maxPages} páginas). ${allAds.length} anuncios obtenidos.`)
   }
 
   console.log(`[SearchAPI] Total: ${allAds.length} ads`)

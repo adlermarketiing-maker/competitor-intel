@@ -155,7 +155,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
         await upsertAd(competitorId, raw)
         completedTasks++
         await updateScrapeJob(jobDbId, { completedTasks })
-      } catch {
+      } catch (err) {
+        console.error(`[Worker] Error saving ad:`, err instanceof Error ? err.message : err)
         failedTasks++
       }
     }
@@ -229,8 +230,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
               if (analyzed % 10 === 0) {
                 await emit(jobDbId, 'progress', `IA: ${analyzed}/${toAnalyze.length} anuncios analizados`)
               }
-            } catch {
-              // Skip individual ad analysis errors
+            } catch (err) {
+              console.error(`[Worker] Ad analysis error (${ad.id}):`, err instanceof Error ? err.message : err)
             }
             // Small delay to avoid rate limits
             await new Promise((r) => setTimeout(r, 300))
@@ -425,13 +426,10 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       if (ad.landingUrl) urlToAdId.set(normalizeUrl(ad.landingUrl), ad.id)
     }
 
-    // Delete old landing pages for this competitor before saving new ones
-    await db.landingPage.deleteMany({ where: { competitorId } })
-    await emit(jobDbId, 'progress', `Limpiando landings antiguas...`)
-
-    // Now scrape all discovered URLs
+    // Scrape all discovered URLs first, then replace old data
     await emit(jobDbId, 'progress', `${discoveredUrls.size} landing pages a scrapear...`)
     let landingsDone = 0
+    const scrapedLandings: Array<{ url: string; adId: string | null; content: Awaited<ReturnType<typeof scrapePage>> }> = []
 
     for (const [url, source] of discoveredUrls.entries()) {
       try {
@@ -442,7 +440,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
         content.url = normalizeUrl(content.url)
 
         const adId = urlToAdId.get(url) ?? null
-        await upsertLandingPage(competitorId, adId, content)
+        scrapedLandings.push({ url, adId, content })
 
         landingsDone++
         await emit(jobDbId, 'progress', `Landing scrapeada (${landingsDone}/${discoveredUrls.size})`)
@@ -453,6 +451,19 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
 
       // Pause between pages
       await new Promise((r) => setTimeout(r, 1000))
+    }
+
+    // Only delete old landings after successfully scraping new ones
+    if (scrapedLandings.length > 0) {
+      await db.landingPage.deleteMany({ where: { competitorId } })
+      for (const { adId, content } of scrapedLandings) {
+        try {
+          await upsertLandingPage(competitorId, adId, content)
+        } catch (err) {
+          console.error(`[Worker] Error saving landing:`, err instanceof Error ? err.message : err)
+        }
+      }
+      await emit(jobDbId, 'progress', `${scrapedLandings.length} landings guardadas`)
     }
   }
 
@@ -526,8 +537,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
                 })
               }
             }
-          } catch {
-            // Skip individual course errors
+          } catch (err) {
+            console.error(`[Worker] Course scrape error:`, err instanceof Error ? err.message : err)
           }
           await new Promise((r) => setTimeout(r, 1000))
         }
@@ -592,12 +603,12 @@ export function startWorker() {
         status: 'FAILED',
         errorMessage: err.message,
         completedAt: new Date(),
-      }).catch(() => {})
+      }).catch((e) => console.error('[Worker] Failed to update job status:', e))
       publishJobEvent(job.data.jobDbId, {
         type: 'status',
         message: `Error: ${err.message}`,
         status: 'FAILED',
-      }).catch(() => {})
+      }).catch((e) => console.error('[Worker] Failed to publish failure event:', e))
     }
   })
   worker.on('error', (err) => {

@@ -68,8 +68,8 @@ export async function analyzeTrendsVsAds(): Promise<TrendInsight[]> {
 
   // Summarize organic content
   const organicSummary = organicPosts.slice(0, 50).map((p) => {
-    const engagement = p.likes + (p.views > 0 ? ` (${p.views} views)` : '')
-    return `[${p.platform}] ${p.mediaType || 'post'} by @${p.authorHandle}: "${(p.caption || '').slice(0, 80)}" — ${engagement} likes${p.isViral ? ' 🔥VIRAL' : ''}${p.soundName ? ` [Sound: ${p.soundName}]` : ''}${p.transcript ? ` [Hook: "${p.transcript.slice(0, 60)}..."]` : ''}`
+    const engagement = `${p.likes} likes` + (p.views > 0 ? ` (${p.views} views)` : '')
+    return `[${p.platform}] ${p.mediaType || 'post'} by @${p.authorHandle}: "${(p.caption || '').slice(0, 80)}" — ${engagement}${p.isViral ? ' 🔥VIRAL' : ''}${p.soundName ? ` [Sound: ${p.soundName}]` : ''}${p.transcript ? ` [Hook: "${p.transcript.slice(0, 60)}..."]` : ''}`
   }).join('\n')
 
   // Summarize viral content

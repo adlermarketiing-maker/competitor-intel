@@ -72,8 +72,8 @@ export async function searchTrustpilot(keyword: string, maxResults = 8): Promise
     }, maxResults)
 
     businesses.push(...results)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Trustpilot] Error searching "${keyword}":`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()
@@ -121,8 +121,8 @@ export async function scrapeTrustpilotReviews(businessUrl: string, maxReviews = 
     }, maxReviews)
 
     comments.push(...reviews)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Trustpilot] Error scraping reviews:`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()

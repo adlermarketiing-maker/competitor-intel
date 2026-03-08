@@ -76,8 +76,8 @@ export async function searchYouTube(keyword: string, maxVideos = 8): Promise<You
     }, maxVideos)
 
     videos.push(...results)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[YouTube] Error searching "${keyword}":`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()
@@ -134,8 +134,8 @@ export async function scrapeYouTubeComments(videoUrl: string, maxComments = 20):
     }, maxComments)
 
     comments.push(...results)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[YouTube] Error scraping comments:`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()

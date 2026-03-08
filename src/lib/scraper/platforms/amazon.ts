@@ -76,8 +76,8 @@ export async function searchAmazon(keyword: string, maxProducts = 8): Promise<Am
     }, maxProducts)
 
     products.push(...results)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Amazon] Error searching "${keyword}":`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()
@@ -134,8 +134,8 @@ export async function scrapeAmazonReviews(productUrl: string, maxReviews = 20): 
     }, maxReviews)
 
     comments.push(...reviews)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Amazon] Error scraping reviews:`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()

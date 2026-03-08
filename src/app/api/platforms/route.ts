@@ -40,8 +40,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Keywords requeridas' }, { status: 400 })
     }
 
+    const VALID_PLATFORMS = ['udemy', 'hotmart', 'skool', 'pylon', 'trustpilot', 'amazon', 'youtube', 'reddit']
     const enabledPlatforms: string[] = platforms?.length > 0
-      ? platforms
+      ? platforms.filter((p: string) => VALID_PLATFORMS.includes(p))
       : ['udemy', 'hotmart', 'skool', 'pylon']
 
     // Run scrapers in parallel (they create their own browser instances)

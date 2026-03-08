@@ -79,8 +79,8 @@ export async function searchUdemy(keyword: string, maxCourses = 8): Promise<Udem
     }, maxCourses)
 
     courses.push(...results)
-  } catch {
-    // Silently fail — return whatever was collected
+  } catch (err) {
+    console.error(`[Udemy] Error searching "${keyword}":`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()
@@ -122,8 +122,8 @@ export async function scrapeUdemyReviews(courseUrl: string, maxReviews = 20): Pr
     }, maxReviews)
 
     comments.push(...reviews)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Udemy] Error scraping reviews:`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()

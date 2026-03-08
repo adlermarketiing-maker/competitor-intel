@@ -93,16 +93,19 @@ export async function markEliminatedAds(competitorId: string, scrapedMetaAdIds: 
 
   const retiredWinners: Array<{ metaAdId: string; daysActive: number; headline: string | null }> = []
 
-  for (const ad of missingAds) {
+  const updates = missingAds.map((ad) => {
     const daysActive = computeDaysActive(ad.startDate, ad.stopDate ?? now)
     if (ad.adStatus === 'winner') {
       retiredWinners.push({ metaAdId: ad.metaAdId, daysActive, headline: ad.headline })
     }
-    // Mark as inactive and update daysActive, but keep winner status
-    await db.ad.update({
+    return db.ad.update({
       where: { id: ad.id },
       data: { isActive: false, daysActive, adStatus: computeAdStatus(daysActive) },
     })
+  })
+
+  if (updates.length > 0) {
+    await db.$transaction(updates)
   }
 
   return { eliminatedCount: missingAds.length, retiredWinners }
@@ -256,17 +259,21 @@ export async function recalculateAllAdStatuses() {
     select: { id: true, startDate: true, stopDate: true },
   })
 
-  let updated = 0
-  for (const ad of ads) {
+  const updates = ads.map((ad) => {
     const daysActive = computeDaysActive(ad.startDate, ad.stopDate)
     const adStatus = computeAdStatus(daysActive)
-    await db.ad.update({
+    return db.ad.update({
       where: { id: ad.id },
       data: { daysActive, adStatus },
     })
-    updated++
+  })
+
+  // Batch in chunks of 100 to avoid transaction size limits
+  for (let i = 0; i < updates.length; i += 100) {
+    await db.$transaction(updates.slice(i, i + 100))
   }
-  return { updated }
+
+  return { updated: ads.length }
 }
 
 export async function getAdStatusCounts(competitorId: string) {

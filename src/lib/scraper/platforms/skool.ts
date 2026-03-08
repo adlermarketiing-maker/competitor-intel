@@ -79,8 +79,8 @@ export async function searchSkool(keyword: string, maxCommunities = 8): Promise<
     }, maxCommunities)
 
     communities.push(...results)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Skool] Error searching "${keyword}":`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()
@@ -119,8 +119,8 @@ export async function scrapeSkoolComments(communityUrl: string, maxComments = 20
     }, maxComments)
 
     comments.push(...posts)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Skool] Error scraping comments:`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()

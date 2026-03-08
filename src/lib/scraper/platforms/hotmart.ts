@@ -72,8 +72,8 @@ export async function searchHotmart(keyword: string, maxProducts = 8): Promise<H
     }, maxProducts)
 
     products.push(...results)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Hotmart] Error searching "${keyword}":`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()
@@ -115,8 +115,8 @@ export async function scrapeHotmartComments(productUrl: string, maxComments = 20
     }, maxComments)
 
     comments.push(...reviews)
-  } catch {
-    // Silently fail
+  } catch (err) {
+    console.error(`[Hotmart] Error scraping comments:`, err instanceof Error ? err.message : err)
   } finally {
     await page.close()
     await browser.close()

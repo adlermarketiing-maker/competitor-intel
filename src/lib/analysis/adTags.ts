@@ -105,7 +105,14 @@ REGLAS:
     jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
   }
 
-  const result = JSON.parse(jsonStr)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let result: any
+  try {
+    result = JSON.parse(jsonStr)
+  } catch {
+    console.error('[AdTags] Failed to parse Claude response as JSON:', jsonStr.slice(0, 200))
+    throw new Error('Failed to parse AI response for ad analysis')
+  }
 
   return {
     hookType: result.hookType || 'llamada_directa',

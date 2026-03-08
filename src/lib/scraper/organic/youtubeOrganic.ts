@@ -29,20 +29,25 @@ async function getBrowser() {
 
 function parseViewCount(text: string): number {
   if (!text) return 0
-  text = text.replace(/\s/g, '').replace(/,/g, '.')
-  const match = text.match(/([\d.]+)\s*([KkMmBb]?)/)
-  if (!match) return parseInt(text.replace(/\D/g, '')) || 0
-  const num = parseFloat(match[1])
-  const suffix = match[2].toUpperCase()
-  if (suffix === 'K') return Math.round(num * 1000)
-  if (suffix === 'M') return Math.round(num * 1000000)
-  if (suffix === 'B') return Math.round(num * 1000000000)
-  return Math.round(num)
+  text = text.replace(/\s/g, '')
+  // Check for abbreviated numbers (K/M/B suffix) — use dot as decimal
+  const abbrMatch = text.match(/([\d.,]+)\s*([KkMmBb])/)
+  if (abbrMatch) {
+    // For abbreviated: treat comma as decimal (Spanish locale: "1,2M" → 1.2M)
+    const num = parseFloat(abbrMatch[1].replace(/,/g, '.'))
+    const suffix = abbrMatch[2].toUpperCase()
+    if (suffix === 'K') return Math.round(num * 1000)
+    if (suffix === 'M') return Math.round(num * 1000000)
+    if (suffix === 'B') return Math.round(num * 1000000000)
+  }
+  // For plain numbers: strip all non-digit characters (handles "1,234" and "1.234" as thousands)
+  return parseInt(text.replace(/\D/g, '')) || 0
 }
 
 function parseDuration(text: string): number | null {
   if (!text) return null
   const parts = text.split(':').map(Number)
+  if (parts.some(isNaN)) return null
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
   if (parts.length === 2) return parts[0] * 60 + parts[1]
   return null

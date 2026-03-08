@@ -12,8 +12,9 @@ export async function POST(req: NextRequest) {
       keywords?: string
     }
 
-    if (!platform) {
-      return NextResponse.json({ error: 'Platform requerida' }, { status: 400 })
+    const VALID_PLATFORMS = ['instagram', 'tiktok', 'youtube']
+    if (!platform || !VALID_PLATFORMS.includes(platform)) {
+      return NextResponse.json({ error: 'Platform inválida. Usa: instagram, tiktok, youtube' }, { status: 400 })
     }
 
     let saved = 0
