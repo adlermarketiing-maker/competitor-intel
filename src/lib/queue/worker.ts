@@ -470,6 +470,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       { name: 'hotmart', search: () => import('@/lib/scraper/platforms/hotmart').then((m) => m.searchHotmart(searchTerm, 5)), scrapeComments: (url: string) => import('@/lib/scraper/platforms/hotmart').then((m) => m.scrapeHotmartComments(url, 15)) },
       { name: 'trustpilot', search: () => import('@/lib/scraper/platforms/trustpilot').then((m) => m.searchTrustpilot(searchTerm, 5)), scrapeComments: (url: string) => import('@/lib/scraper/platforms/trustpilot').then((m) => m.scrapeTrustpilotReviews(url, 15)) },
       { name: 'amazon', search: () => import('@/lib/scraper/platforms/amazon').then((m) => m.searchAmazon(searchTerm, 5)), scrapeComments: (url: string) => import('@/lib/scraper/platforms/amazon').then((m) => m.scrapeAmazonReviews(url, 15)) },
+      { name: 'youtube', search: () => import('@/lib/scraper/platforms/youtube').then((m) => m.searchYouTube(searchTerm, 5)), scrapeComments: (url: string) => import('@/lib/scraper/platforms/youtube').then((m) => m.scrapeYouTubeComments(url, 15)) },
+      { name: 'reddit', search: () => import('@/lib/scraper/platforms/reddit').then((m) => m.searchReddit(searchTerm, 5)), scrapeComments: (url: string) => import('@/lib/scraper/platforms/reddit').then((m) => m.scrapeRedditComments(url, 15)) },
     ]
 
     for (const platform of platformScrapers) {

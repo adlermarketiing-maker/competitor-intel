@@ -110,6 +110,14 @@ async function scrapePlatform(
       const { searchAmazon, scrapeAmazonReviews } = await import('@/lib/scraper/platforms/amazon')
       courses = await searchAmazon(keywords, 8)
       scrapeComments = scrapeAmazonReviews
+    } else if (platform === 'youtube') {
+      const { searchYouTube, scrapeYouTubeComments } = await import('@/lib/scraper/platforms/youtube')
+      courses = await searchYouTube(keywords, 8)
+      scrapeComments = scrapeYouTubeComments
+    } else if (platform === 'reddit') {
+      const { searchReddit, scrapeRedditComments } = await import('@/lib/scraper/platforms/reddit')
+      courses = await searchReddit(keywords, 8)
+      scrapeComments = scrapeRedditComments
     } else {
       return []
     }

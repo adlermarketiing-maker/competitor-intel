@@ -11,6 +11,8 @@ const PLATFORM_OPTIONS = [
   { value: 'amazon', label: 'Amazon' },
   { value: 'skool', label: 'Skool' },
   { value: 'pylon', label: 'Pylon' },
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'reddit', label: 'Reddit' },
 ]
 
 interface Comment {

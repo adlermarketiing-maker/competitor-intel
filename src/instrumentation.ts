@@ -14,5 +14,15 @@ export async function register() {
     } catch (err) {
       console.error('[App] Failed to start digest worker:', err)
     }
+
+    // Start market re-analysis worker and schedule
+    try {
+      const { startMarketWorker, setupMarketSchedule } = await import('./lib/queue/marketWorker')
+      startMarketWorker()
+      await setupMarketSchedule()
+      console.log('[App] Market re-analysis worker started')
+    } catch (err) {
+      console.error('[App] Failed to start market worker:', err)
+    }
   }
 }
