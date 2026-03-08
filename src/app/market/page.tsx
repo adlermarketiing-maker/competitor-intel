@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useClient } from '@/contexts/ClientContext'
 
 interface AnalysisItem {
   text: string
@@ -110,6 +111,7 @@ function RankedList({ items, color, search }: { items: AnalysisItem[]; color: st
 }
 
 export default function MarketPage() {
+  const { selectedClientId } = useClient()
   const [analyses, setAnalyses] = useState<MarketAnalysis[]>([])
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([])
   const [selectedAnalysis, setSelectedAnalysis] = useState<MarketAnalysis | null>(null)
@@ -118,9 +120,10 @@ export default function MarketPage() {
   const [competitorFilter, setCompetitorFilter] = useState('')
 
   useEffect(() => {
+    const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
     Promise.all([
-      fetch('/api/market-analysis').then((r) => r.json()),
-      fetch('/api/competitors').then((r) => r.json()),
+      fetch(`/api/market-analysis${cParam}`).then((r) => r.json()),
+      fetch(`/api/competitors${cParam}`).then((r) => r.json()),
     ]).then(([analysesData, comps]) => {
       if (Array.isArray(analysesData)) {
         setAnalyses(analysesData)
@@ -129,7 +132,7 @@ export default function MarketPage() {
       if (Array.isArray(comps)) setCompetitors(comps)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [])
+  }, [selectedClientId])
 
   const filteredAnalyses = competitorFilter
     ? analyses.filter((a) => a.competitor?.id === competitorFilter)

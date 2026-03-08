@@ -8,7 +8,7 @@ import type { MetaAdRaw } from '@/types/scrape'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { keywords, countries } = body
+    const { keywords, countries, clientId } = body
 
     if (!keywords?.trim()) {
       return NextResponse.json({ error: 'Keywords requeridas' }, { status: 400 })
@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
       data: {
         keywords: keywords.trim(),
         countries: effectiveCountries,
+        clientId: clientId || null,
         discoveredCompetitors: {
           create: advertisers.map((a) => ({
             pageName: a.pageName,
@@ -98,9 +99,12 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const clientId = req.nextUrl.searchParams.get('clientId') || undefined
+    const where = clientId ? { clientId } : {}
     const searches = await db.keywordSearch.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useClient } from '@/contexts/ClientContext'
 import AdCard from '@/components/ads/AdCard'
 import EmptyState from '@/components/shared/EmptyState'
 import QuickAddModal from '@/components/shared/QuickAddModal'
@@ -26,6 +27,7 @@ const CREATIVE_FORMATS = ['imagen_estatica', 'carrusel', 'video_ugc', 'video_tal
 const AWARENESS_LEVELS = ['inconsciente', 'consciente_problema', 'consciente_solucion', 'consciente_producto', 'mas_consciente']
 
 export default function AdsPage() {
+  const { selectedClientId } = useClient()
   const [data, setData] = useState<AdsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([])
@@ -45,15 +47,17 @@ export default function AdsPage() {
 
   // Load competitor list for filter dropdown
   useEffect(() => {
-    fetch('/api/competitors')
+    const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
+    fetch(`/api/competitors${cParam}`)
       .then((r) => r.json())
       .then((list: CompetitorOption[]) => setCompetitors(list))
       .catch(() => {})
-  }, [])
+  }, [selectedClientId])
 
   useEffect(() => {
     setLoading(true)
     const params = new URLSearchParams({ page: String(page), limit: '24' })
+    if (selectedClientId) params.set('clientId', selectedClientId)
     if (adStatus) params.set('adStatus', adStatus)
     if (isActiveFilter === 'true' || isActiveFilter === 'false') params.set('isActive', isActiveFilter)
     if (competitorId) params.set('competitorId', competitorId)
@@ -70,7 +74,7 @@ export default function AdsPage() {
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [adStatus, isActiveFilter, page, competitorId, sortBy, minDays, maxDays, hookType, marketingAngle, creativeFormat, awarenessLevel, minScore])
+  }, [adStatus, isActiveFilter, page, competitorId, sortBy, minDays, maxDays, hookType, marketingAngle, creativeFormat, awarenessLevel, minScore, selectedClientId])
 
   const hasActiveFilters = competitorId !== '' || adStatus !== '' || isActiveFilter !== '' || sortBy !== '' || minDays !== '' || maxDays !== '' || hookType !== '' || marketingAngle !== '' || creativeFormat !== '' || awarenessLevel !== '' || minScore !== ''
 

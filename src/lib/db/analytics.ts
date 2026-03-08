@@ -128,8 +128,10 @@ async function getOfferSummary(where: Record<string, unknown>): Promise<OfferSum
 }
 
 /** Competitor comparison */
-async function getCompetitorComparison(where: Record<string, unknown>): Promise<CompetitorComparison[]> {
+async function getCompetitorComparison(where: Record<string, unknown>, clientId?: string): Promise<CompetitorComparison[]> {
+  const compWhere = clientId ? { clientId } : {}
   const competitors = await db.competitor.findMany({
+    where: compWhere,
     select: { id: true, name: true },
     orderBy: { name: 'asc' },
   })
@@ -243,9 +245,10 @@ async function getWeeklyTrends(where: Record<string, unknown>, weeks = 8): Promi
   return trends
 }
 
-export async function getAnalytics(competitorId?: string): Promise<AnalyticsData> {
+export async function getAnalytics(competitorId?: string, clientId?: string): Promise<AnalyticsData> {
   const where: Record<string, unknown> = {}
   if (competitorId) where.competitorId = competitorId
+  if (clientId && !competitorId) where.competitor = { clientId }
 
   const [
     totalAds,
@@ -275,7 +278,7 @@ export async function getAnalytics(competitorId?: string): Promise<AnalyticsData
     getDistribution('copyLength', where),
     getTopCtas(where),
     getOfferSummary(where),
-    getCompetitorComparison(where),
+    getCompetitorComparison(where, clientId),
     getWeeklyTrends(where),
   ])
 

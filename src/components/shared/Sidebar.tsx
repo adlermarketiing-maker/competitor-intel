@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import QuickAddModal from './QuickAddModal'
+import { useClient } from '@/contexts/ClientContext'
 
 const NAV_ITEMS = [
   {
@@ -111,7 +112,9 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  const { clients, selectedClient, selectClient } = useClient()
 
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : pathname.startsWith(href)
@@ -121,7 +124,7 @@ export default function Sidebar() {
       {showModal && <QuickAddModal onClose={() => setShowModal(false)} />}
     <aside className="w-60 h-full bg-slate-900 flex flex-col flex-shrink-0 border-r border-slate-800">
       {/* Logo */}
-      <div className="px-5 pt-6 pb-5 border-b border-slate-800">
+      <div className="px-5 pt-6 pb-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-900/50 flex-shrink-0">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,6 +136,44 @@ export default function Sidebar() {
             <p className="text-slate-500 text-xs font-medium">Intelligence</p>
           </div>
         </div>
+      </div>
+
+      {/* Client switcher */}
+      <div className="px-3 pb-4 border-b border-slate-800">
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2 mb-1.5 block">Cliente</label>
+        {clients.length === 0 ? (
+          <button
+            onClick={() => router.push('/clients')}
+            className="w-full h-9 px-3 bg-violet-600/20 border border-violet-500/30 rounded-xl text-sm text-violet-300 font-medium hover:bg-violet-600/30 transition-colors text-left"
+          >
+            + Crear primer cliente
+          </button>
+        ) : (
+          <div className="relative">
+            <select
+              value={selectedClient?.id || '__all__'}
+              onChange={(e) => {
+                if (e.target.value === '__manage__') {
+                  router.push('/clients')
+                } else if (e.target.value === '__all__') {
+                  selectClient('')
+                } else {
+                  selectClient(e.target.value)
+                }
+              }}
+              className="w-full h-9 pl-3 pr-7 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white font-medium focus:outline-none focus:ring-2 focus:ring-violet-500 appearance-none cursor-pointer truncate"
+            >
+              <option value="__all__">Todos los clientes</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+              <option value="__manage__">Gestionar clientes...</option>
+            </select>
+            <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        )}
       </div>
 
       {/* Navigation */}

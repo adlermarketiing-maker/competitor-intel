@@ -4,9 +4,10 @@ import { analyzeReviews } from '@/lib/analysis/market'
 import { saveMarketAnalysis, getLatestMarketAnalyses } from '@/lib/db/market'
 
 // GET — return existing market analyses
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const analyses = await getLatestMarketAnalyses(50)
+    const clientId = req.nextUrl.searchParams.get('clientId') || undefined
+    const analyses = await getLatestMarketAnalyses(50, clientId)
     return NextResponse.json(analyses)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -18,9 +19,10 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { keywords, competitorId } = body as {
+    const { keywords, competitorId, clientId } = body as {
       keywords?: string
       competitorId?: string
+      clientId?: string
     }
 
     if (!keywords?.trim() && !competitorId) {
@@ -101,6 +103,7 @@ export async function POST(req: NextRequest) {
     const saved = await saveMarketAnalysis({
       ...analysis,
       competitorId: competitorId ?? undefined,
+      clientId: clientId ?? undefined,
       searchKeywords: keywords?.trim(),
       totalReviews: reviews.length,
       platforms,

@@ -14,17 +14,27 @@ export interface TrendInsight {
  * Cross-analyze organic content trends vs ad trends to find opportunities.
  * Uses Claude to generate actionable insights.
  */
-export async function analyzeTrendsVsAds(): Promise<TrendInsight[]> {
+export async function analyzeTrendsVsAds(clientId?: string): Promise<TrendInsight[]> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return []
 
   const since = new Date()
   since.setDate(since.getDate() - 30)
 
+  const organicWhere: Record<string, unknown> = { scrapedAt: { gte: since } }
+  const viralWhere: Record<string, unknown> = { isViral: true, scrapedAt: { gte: since } }
+  const adWhere: Record<string, unknown> = { firstSeenAt: { gte: since }, aiAnalyzed: true }
+
+  if (clientId) {
+    organicWhere.competitor = { clientId }
+    viralWhere.competitor = { clientId }
+    adWhere.competitor = { clientId }
+  }
+
   // Gather organic data
   const [organicPosts, viralPosts, adData] = await Promise.all([
     db.organicPost.findMany({
-      where: { scrapedAt: { gte: since } },
+      where: organicWhere,
       select: {
         id: true,
         platform: true,
@@ -44,13 +54,13 @@ export async function analyzeTrendsVsAds(): Promise<TrendInsight[]> {
       take: 100,
     }),
     db.organicPost.findMany({
-      where: { isViral: true, scrapedAt: { gte: since } },
+      where: viralWhere,
       select: { id: true, platform: true, caption: true, mediaType: true, views: true, soundName: true, transcript: true, hashtags: true },
       orderBy: { viralScore: 'desc' },
       take: 20,
     }),
     db.ad.findMany({
-      where: { firstSeenAt: { gte: since }, aiAnalyzed: true },
+      where: adWhere,
       select: {
         hookType: true,
         marketingAngle: true,

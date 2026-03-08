@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useClient } from '@/contexts/ClientContext'
 
 const COUNTRY_OPTIONS = [
   { code: 'ES', label: 'ES' },
@@ -19,6 +20,7 @@ interface QuickAddModalProps {
 
 export default function QuickAddModal({ onClose }: QuickAddModalProps) {
   const router = useRouter()
+  const { selectedClientId } = useClient()
   const nameRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,6 +60,7 @@ export default function QuickAddModal({ onClose }: QuickAddModalProps) {
       searchTerm: (data.get('searchTerm') as string)?.trim() || undefined,
       countries,
       jobType,
+      clientId: selectedClientId || undefined,
     }
 
     if (!body.name) {

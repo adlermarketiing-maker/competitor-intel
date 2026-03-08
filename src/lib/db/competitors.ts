@@ -1,8 +1,10 @@
 import { db } from './client'
 
-export async function listCompetitors() {
+export async function listCompetitors(clientId?: string) {
+  const where = clientId ? { clientId } : {}
   const [competitors, activeAdCounts] = await Promise.all([
     db.competitor.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { ads: true } },
@@ -11,7 +13,7 @@ export async function listCompetitors() {
     }),
     db.ad.groupBy({
       by: ['competitorId'],
-      where: { isActive: true },
+      where: { isActive: true, ...(clientId ? { competitor: { clientId } } : {}) },
       _count: { _all: true },
     }),
   ])
@@ -41,6 +43,7 @@ export async function createCompetitor(data: {
   facebookUrl?: string
   instagramUrl?: string
   adLibraryUrl?: string
+  clientId?: string
 }) {
   return db.competitor.create({ data })
 }
@@ -99,12 +102,15 @@ export async function resetCompetitorData(id: string) {
   })
 }
 
-export async function getDashboardStats() {
+export async function getDashboardStats(clientId?: string) {
+  const compWhere = clientId ? { clientId } : {}
+  const adWhere = clientId ? { competitor: { clientId } } : {}
+  const lpWhere = clientId ? { competitor: { clientId } } : {}
   const [competitors, totalAds, activeAds, landingPages] = await Promise.all([
-    db.competitor.count(),
-    db.ad.count(),
-    db.ad.count({ where: { isActive: true } }),
-    db.landingPage.count(),
+    db.competitor.count({ where: compWhere }),
+    db.ad.count({ where: adWhere }),
+    db.ad.count({ where: { isActive: true, ...adWhere } }),
+    db.landingPage.count({ where: lpWhere }),
   ])
   return { competitors, totalAds, activeAds, landingPages }
 }

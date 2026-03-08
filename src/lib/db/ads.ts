@@ -130,6 +130,7 @@ export async function detectLaunch(competitorId: string): Promise<{ isLaunch: bo
 
 export async function listAds(options: {
   competitorId?: string
+  clientId?: string
   isActive?: boolean
   adStatus?: string
   minDays?: number
@@ -145,10 +146,11 @@ export async function listAds(options: {
   page?: number
   limit?: number
 }) {
-  const { competitorId, isActive, adStatus, minDays, maxDays, sortBy, platform, hookType, marketingAngle, creativeFormat, awarenessLevel, copyLength, minScore, page = 1, limit = 24 } = options
+  const { competitorId, clientId, isActive, adStatus, minDays, maxDays, sortBy, platform, hookType, marketingAngle, creativeFormat, awarenessLevel, copyLength, minScore, page = 1, limit = 24 } = options
 
   const where: Record<string, unknown> = {}
   if (competitorId) where.competitorId = competitorId
+  if (clientId && !competitorId) where.competitor = { clientId }
   if (isActive !== undefined) where.isActive = isActive
   if (adStatus) where.adStatus = adStatus
   if (platform) where.platforms = { has: platform }
@@ -203,11 +205,12 @@ export async function getAdsForCompetitor(competitorId: string) {
   })
 }
 
-export async function getWinnersRanking(options?: { competitorId?: string; limit?: number }) {
-  const { competitorId, limit = 50 } = options || {}
+export async function getWinnersRanking(options?: { competitorId?: string; clientId?: string; limit?: number }) {
+  const { competitorId, clientId, limit = 50 } = options || {}
 
   const where: Record<string, unknown> = { adStatus: 'winner' }
   if (competitorId) where.competitorId = competitorId
+  if (clientId && !competitorId) where.competitor = { clientId }
 
   return db.ad.findMany({
     where,
@@ -219,9 +222,11 @@ export async function getWinnersRanking(options?: { competitorId?: string; limit
   })
 }
 
-export async function getWinnersByCompetitor() {
+export async function getWinnersByCompetitor(clientId?: string) {
+  const where: Record<string, unknown> = { adStatus: 'winner' }
+  if (clientId) where.competitor = { clientId }
   const winners = await db.ad.findMany({
-    where: { adStatus: 'winner' },
+    where,
     select: {
       id: true,
       daysActive: true,

@@ -5,6 +5,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl
     const competitorId = searchParams.get('competitorId') || undefined
+    const clientId = searchParams.get('clientId') || undefined
     const isActiveParam = searchParams.get('isActive')
     const isActive = isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : undefined
     const adStatus = searchParams.get('adStatus') || undefined
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1)
     const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '24') || 24))
 
-    const result = await listAds({ competitorId, isActive, adStatus, minDays, maxDays, sortBy, platform, hookType, marketingAngle, creativeFormat, awarenessLevel, copyLength, minScore, page, limit })
+    const result = await listAds({ competitorId, clientId, isActive, adStatus, minDays, maxDays, sortBy, platform, hookType, marketingAngle, creativeFormat, awarenessLevel, copyLength, minScore, page, limit })
     return NextResponse.json(result)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

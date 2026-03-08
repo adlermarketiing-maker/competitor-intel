@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useClient } from '@/contexts/ClientContext'
 import DiscoveredTable, { type DiscoveredAdvertiser } from '@/components/discover/DiscoveredTable'
 
 const COUNTRY_OPTIONS = [
@@ -30,6 +31,7 @@ interface HistoryItem {
 }
 
 export default function DiscoverPage() {
+  const { selectedClientId } = useClient()
   const [keywords, setKeywords] = useState('')
   const [selectedCountries, setSelectedCountries] = useState<string[]>(['ES', 'MX', 'AR', 'CO'])
   const [loading, setLoading] = useState(false)
@@ -39,11 +41,12 @@ export default function DiscoverPage() {
   const [loadingHistory, setLoadingHistory] = useState(true)
 
   useEffect(() => {
-    fetch('/api/discover')
+    const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
+    fetch(`/api/discover${cParam}`)
       .then((r) => r.json())
       .then((data) => { setHistory(data); setLoadingHistory(false) })
       .catch(() => setLoadingHistory(false))
-  }, [])
+  }, [selectedClientId])
 
   const toggleCountry = (code: string) => {
     setSelectedCountries((prev) =>
@@ -62,13 +65,14 @@ export default function DiscoverPage() {
       const res = await fetch('/api/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keywords: keywords.trim(), countries: selectedCountries }),
+        body: JSON.stringify({ keywords: keywords.trim(), countries: selectedCountries, clientId: selectedClientId || undefined }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setResult(data)
       // Refresh history
-      fetch('/api/discover')
+      const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
+      fetch(`/api/discover${cParam}`)
         .then((r) => r.json())
         .then(setHistory)
         .catch(() => {})

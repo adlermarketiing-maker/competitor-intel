@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useClient } from '@/contexts/ClientContext'
 
 /* ── Types ── */
 interface DistributionItem {
@@ -148,6 +149,7 @@ function WeeklyChart({ trends }: { trends: AnalyticsData['weeklyTrends'] }) {
 
 /* ── Main page ── */
 export default function AnalyticsPage() {
+  const { selectedClientId } = useClient()
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([])
@@ -156,27 +158,34 @@ export default function AnalyticsPage() {
   const [insightsLoading, setInsightsLoading] = useState(false)
 
   useEffect(() => {
-    fetch('/api/competitors')
+    const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
+    fetch(`/api/competitors${cParam}`)
       .then((r) => r.json())
       .then((list: CompetitorOption[]) => setCompetitors(list))
       .catch(() => {})
-  }, [])
+  }, [selectedClientId])
 
   const loadData = useCallback(() => {
     setLoading(true)
-    const params = competitorId ? `?competitorId=${competitorId}` : ''
-    fetch(`/api/analytics${params}`)
+    const params = new URLSearchParams()
+    if (selectedClientId) params.set('clientId', selectedClientId)
+    if (competitorId) params.set('competitorId', competitorId)
+    const qs = params.toString() ? `?${params}` : ''
+    fetch(`/api/analytics${qs}`)
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [competitorId])
+  }, [competitorId, selectedClientId])
 
   useEffect(() => { loadData() }, [loadData])
 
   const loadInsights = () => {
     setInsightsLoading(true)
-    const params = competitorId ? `?competitorId=${competitorId}` : ''
-    fetch(`/api/analytics/insights${params}`)
+    const params = new URLSearchParams()
+    if (selectedClientId) params.set('clientId', selectedClientId)
+    if (competitorId) params.set('competitorId', competitorId)
+    const qs = params.toString() ? `?${params}` : ''
+    fetch(`/api/analytics/insights${qs}`)
       .then((r) => r.json())
       .then((d) => { setInsights(d.insights || d.error); setInsightsLoading(false) })
       .catch(() => { setInsights('Error al generar insights'); setInsightsLoading(false) })

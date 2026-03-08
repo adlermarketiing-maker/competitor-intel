@@ -3,9 +3,10 @@ import { getOpportunities, dismissOpportunity, saveOpportunity } from '@/lib/db/
 import { analyzeTrendsVsAds } from '@/lib/analysis/trends'
 
 // GET — return trend opportunities
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const opportunities = await getOpportunities(50)
+    const clientId = req.nextUrl.searchParams.get('clientId') || undefined
+    const opportunities = await getOpportunities(50, false, clientId)
     return NextResponse.json(opportunities)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -17,7 +18,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { action, id } = body as { action: 'generate' | 'dismiss'; id?: string }
+    const { action, id, clientId } = body as { action: 'generate' | 'dismiss'; id?: string; clientId?: string }
 
     if (action === 'dismiss' && id) {
       await dismissOpportunity(id)
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 500 })
       }
 
-      const insights = await analyzeTrendsVsAds()
+      const insights = await analyzeTrendsVsAds(clientId)
 
       const saved = []
       for (const insight of insights) {
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
           source: insight.source,
           urgency: insight.urgency,
           relatedPosts: insight.relatedPostIds,
+          clientId,
         })
         saved.push(opp)
       }

@@ -1,20 +1,50 @@
+'use client'
+
 import Link from 'next/link'
-import { getDashboardStats, listCompetitors } from '@/lib/db/competitors'
-import { getSettings } from '@/lib/db/settings'
+import { useEffect, useState } from 'react'
+import { useClient } from '@/contexts/ClientContext'
 import StatCard from '@/components/shared/StatCard'
 import CompetitorTable from '@/components/competitors/CompetitorTable'
 import AddCompetitorButton from '@/components/shared/AddCompetitorButton'
 
-export const dynamic = 'force-dynamic'
+interface DashboardStats {
+  competitors: number
+  totalAds: number
+  activeAds: number
+  landingPages: number
+}
 
-export default async function DashboardPage() {
-  const [stats, competitors, settings] = await Promise.all([
-    getDashboardStats(),
-    listCompetitors(),
-    getSettings(),
-  ])
+export default function DashboardPage() {
+  const { selectedClientId, loading: clientLoading } = useClient()
+  const [stats, setStats] = useState<DashboardStats>({ competitors: 0, totalAds: 0, activeAds: 0, landingPages: 0 })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [competitors, setCompetitors] = useState<any[]>([])
+  const [hasToken, setHasToken] = useState(true)
+  const [loading, setLoading] = useState(true)
 
-  const hasToken = !!settings?.metaToken
+  useEffect(() => {
+    if (clientLoading) return
+    setLoading(true)
+    const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
+    Promise.all([
+      fetch(`/api/dashboard${cParam}`).then((r) => r.json()).catch(() => ({ competitors: 0, totalAds: 0, activeAds: 0, landingPages: 0 })),
+      fetch(`/api/competitors${cParam}`).then((r) => r.json()).catch(() => []),
+      fetch('/api/settings').then((r) => r.json()).catch(() => null),
+    ]).then(([dashStats, comps, settings]) => {
+      setStats(dashStats)
+      setCompetitors(comps)
+      setHasToken(!!settings?.hasToken)
+      setLoading(false)
+    })
+  }, [selectedClientId, clientLoading])
+
+  if (loading || clientLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="p-8">

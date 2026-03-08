@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useClient } from '@/contexts/ClientContext'
 import PlatformCourseCard from '@/components/reviews/PlatformCourseCard'
 import MarketAnalysisCard from '@/components/market/MarketAnalysisCard'
 
@@ -42,6 +43,7 @@ interface Course {
 type MarketAnalysis = any
 
 export default function ReviewsPage() {
+  const { selectedClientId } = useClient()
   const [keywords, setKeywords] = useState('')
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['udemy', 'hotmart', 'trustpilot', 'amazon', 'skool', 'pylon'])
   const [loading, setLoading] = useState(false)
@@ -57,17 +59,19 @@ export default function ReviewsPage() {
   const [analysisError, setAnalysisError] = useState<string | null>(null)
 
   useEffect(() => {
+    const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
+    setFetchingCourses(true)
     Promise.all([
-      fetch('/api/platforms').then((r) => r.json()),
-      fetch('/api/market-analysis').then((r) => r.json()),
+      fetch(`/api/platforms${cParam}`).then((r) => r.json()),
+      fetch(`/api/market-analysis${cParam}`).then((r) => r.json()),
     ])
       .then(([coursesData, analysesData]) => {
-        setCourses(coursesData)
+        setCourses(Array.isArray(coursesData) ? coursesData : [])
         if (Array.isArray(analysesData)) setAnalyses(analysesData)
         setFetchingCourses(false)
       })
       .catch(() => setFetchingCourses(false))
-  }, [])
+  }, [selectedClientId])
 
   const togglePlatform = (value: string) => {
     setSelectedPlatforms((prev) =>
@@ -90,8 +94,9 @@ export default function ReviewsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      const refreshed = await fetch('/api/platforms').then((r) => r.json())
-      setCourses(refreshed)
+      const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
+      const refreshed = await fetch(`/api/platforms${cParam}`).then((r) => r.json())
+      setCourses(Array.isArray(refreshed) ? refreshed : [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al buscar')
     } finally {
@@ -109,7 +114,7 @@ export default function ReviewsPage() {
       const res = await fetch('/api/market-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keywords: keywords.trim() }),
+        body: JSON.stringify({ keywords: keywords.trim(), clientId: selectedClientId || undefined }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)

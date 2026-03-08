@@ -4,6 +4,7 @@ import type { MarketAnalysisResult } from '@/lib/analysis/market'
 export async function saveMarketAnalysis(
   data: MarketAnalysisResult & {
     competitorId?: string
+    clientId?: string
     searchKeywords?: string
     totalReviews: number
     platforms: string[]
@@ -12,6 +13,7 @@ export async function saveMarketAnalysis(
   return db.marketAnalysis.create({
     data: {
       competitorId: data.competitorId ?? null,
+      clientId: data.clientId ?? null,
       searchKeywords: data.searchKeywords ?? null,
       objections: data.objections,
       benefits: data.benefits,
@@ -40,8 +42,10 @@ export async function getMarketAnalysisByKeywords(keywords: string) {
   })
 }
 
-export async function getLatestMarketAnalyses(limit = 20) {
+export async function getLatestMarketAnalyses(limit = 20, clientId?: string) {
+  const where = clientId ? { clientId } : {}
   return db.marketAnalysis.findMany({
+    where,
     orderBy: { analyzedAt: 'desc' },
     take: limit,
     include: {

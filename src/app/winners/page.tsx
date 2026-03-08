@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useClient } from '@/contexts/ClientContext'
 import AdCard from '@/components/ads/AdCard'
 import type { Ad } from '@/types/competitor'
 
@@ -15,6 +16,7 @@ interface WinnerGroup {
 type ViewMode = 'ranking' | 'grid'
 
 export default function WinnersPage() {
+  const { selectedClientId } = useClient()
   const [groups, setGroups] = useState<WinnerGroup[]>([])
   const [allWinners, setAllWinners] = useState<Array<Ad & { competitor?: { id: string; name: string } }>>([])
   const [loading, setLoading] = useState(true)
@@ -22,18 +24,19 @@ export default function WinnersPage() {
 
   useEffect(() => {
     setLoading(true)
+    const cParam = selectedClientId ? `&clientId=${selectedClientId}` : ''
     if (view === 'ranking') {
-      fetch('/api/ads/winners?groupBy=competitor')
+      fetch(`/api/ads/winners?groupBy=competitor${cParam}`)
         .then((r) => r.json())
         .then((data) => { setGroups(data); setLoading(false) })
         .catch(() => setLoading(false))
     } else {
-      fetch('/api/ads/winners?limit=100')
+      fetch(`/api/ads/winners?limit=100${cParam}`)
         .then((r) => r.json())
         .then((data) => { setAllWinners(data); setLoading(false) })
         .catch(() => setLoading(false))
     }
-  }, [view])
+  }, [view, selectedClientId])
 
   return (
     <div className="p-8">

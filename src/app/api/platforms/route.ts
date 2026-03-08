@@ -6,8 +6,11 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const searchId = searchParams.get('searchId')
+    const clientId = searchParams.get('clientId')
 
-    const where = searchId ? { searchId } : {}
+    const where: Record<string, unknown> = {}
+    if (searchId) where.searchId = searchId
+    else if (clientId) where.search = { clientId }
 
     const courses = await db.platformCourse.findMany({
       where,

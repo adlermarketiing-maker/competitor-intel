@@ -5,9 +5,10 @@ import { getScrapeQueue } from '@/lib/queue/bullmq'
 import { getSettings } from '@/lib/db/settings'
 import type { JobType } from '@/types/scrape'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const competitors = await listCompetitors()
+    const clientId = req.nextUrl.searchParams.get('clientId') || undefined
+    const competitors = await listCompetitors(clientId)
     return NextResponse.json(competitors)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -18,7 +19,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, fbPageName, websiteUrl, searchTerm, countries, jobType } = body
+    const { name, fbPageName, websiteUrl, searchTerm, countries, jobType, clientId } = body
 
     if (!name?.trim()) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
       fbPageName: fbPageName?.trim() || undefined,
       websiteUrl: websiteUrl?.trim() || undefined,
       searchTerm: searchTerm?.trim() || undefined,
+      clientId: clientId || undefined,
     })
 
     // Trigger initial scrape

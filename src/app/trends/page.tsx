@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useClient } from '@/contexts/ClientContext'
 
 interface OrganicPost {
   id: string
@@ -263,6 +264,7 @@ function OpportunityCard({ opp, onDismiss }: { opp: Opportunity; onDismiss: (id:
 }
 
 export default function TrendsPage() {
+  const { selectedClientId } = useClient()
   const [tab, setTab] = useState<Tab>('all')
   const [posts, setPosts] = useState<OrganicPost[]>([])
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
@@ -285,6 +287,7 @@ export default function TrendsPage() {
       const params = new URLSearchParams()
       if (platformFilter) params.set('platform', platformFilter)
       if (competitorFilter) params.set('competitorId', competitorFilter)
+      if (selectedClientId) params.set('clientId', selectedClientId)
       if (viralOnly) params.set('viral', 'true')
       params.set('limit', '60')
 
@@ -301,25 +304,28 @@ export default function TrendsPage() {
       console.error('[Trends] Error fetching posts:', err)
     }
     setLoading(false)
-  }, [platformFilter, competitorFilter, viralOnly])
+  }, [platformFilter, competitorFilter, viralOnly, selectedClientId])
 
   const fetchOpportunities = useCallback(async () => {
     try {
-      const res = await fetch('/api/trends/opportunities')
+      const params = new URLSearchParams()
+      if (selectedClientId) params.set('clientId', selectedClientId)
+      const res = await fetch(`/api/trends/opportunities?${params}`)
       const data = await res.json()
       if (Array.isArray(data)) setOpportunities(data)
     } catch (err) {
       console.error('[Trends] Error fetching opportunities:', err)
     }
-  }, [])
+  }, [selectedClientId])
 
   useEffect(() => {
+    const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
     Promise.all([
-      fetch('/api/competitors').then((r) => r.json()).then((d) => { if (Array.isArray(d)) setCompetitors(d) }),
+      fetch(`/api/competitors${cParam}`).then((r) => r.json()).then((d) => { if (Array.isArray(d)) setCompetitors(d) }),
       fetchPosts(),
       fetchOpportunities(),
     ]).then(() => setLoading(false))
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedClientId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (tab !== 'opportunities') fetchPosts()
@@ -355,7 +361,7 @@ export default function TrendsPage() {
       await fetch('/api/trends/opportunities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'generate' }),
+        body: JSON.stringify({ action: 'generate', clientId: selectedClientId || undefined }),
       })
       await fetchOpportunities()
     } catch (err) {

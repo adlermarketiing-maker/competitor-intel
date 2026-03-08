@@ -10,7 +10,8 @@ export async function GET(req: NextRequest) {
     }
 
     const competitorId = req.nextUrl.searchParams.get('competitorId') || undefined
-    const data = await getAnalytics(competitorId)
+    const clientId = req.nextUrl.searchParams.get('clientId') || undefined
+    const data = await getAnalytics(competitorId, clientId)
 
     if (data.summary.analyzedAds === 0) {
       return NextResponse.json({ insights: 'No hay suficientes anuncios analizados para generar insights.' })

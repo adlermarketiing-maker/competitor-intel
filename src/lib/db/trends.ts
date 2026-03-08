@@ -71,6 +71,7 @@ export async function upsertOrganicPost(data: OrganicPostInput) {
 export async function getOrganicPosts(filters: {
   platform?: string
   competitorId?: string
+  clientId?: string
   isViral?: boolean
   searchKeywords?: string
   minEngagement?: number
@@ -82,6 +83,7 @@ export async function getOrganicPosts(filters: {
 
   if (filters.platform) where.platform = filters.platform
   if (filters.competitorId) where.competitorId = filters.competitorId
+  else if (filters.clientId) where.competitor = { clientId: filters.clientId }
   if (filters.isViral !== undefined) where.isViral = filters.isViral
   if (filters.searchKeywords) where.searchKeywords = { contains: filters.searchKeywords, mode: 'insensitive' }
   if (filters.minEngagement) where.engagementRate = { gte: filters.minEngagement }
@@ -105,27 +107,31 @@ export async function getOrganicPosts(filters: {
   return { posts, total }
 }
 
-export async function getViralPosts(daysBack = 30, limit = 20) {
+export async function getViralPosts(daysBack = 30, limit = 20, clientId?: string) {
   const since = new Date()
   since.setDate(since.getDate() - daysBack)
 
+  const where: Record<string, unknown> = {
+    isViral: true,
+    scrapedAt: { gte: since },
+  }
+  if (clientId) where.competitor = { clientId }
+
   return db.organicPost.findMany({
-    where: {
-      isViral: true,
-      scrapedAt: { gte: since },
-    },
+    where,
     orderBy: { viralScore: 'desc' },
     take: limit,
     include: { competitor: { select: { id: true, name: true } } },
   })
 }
 
-export async function getTrendingHashtags(platform?: string, daysBack = 30, limit = 30) {
+export async function getTrendingHashtags(platform?: string, daysBack = 30, limit = 30, clientId?: string) {
   const since = new Date()
   since.setDate(since.getDate() - daysBack)
 
   const where: Record<string, unknown> = { scrapedAt: { gte: since } }
   if (platform) where.platform = platform
+  if (clientId) where.competitor = { clientId }
 
   const posts = await db.organicPost.findMany({
     where,
@@ -150,16 +156,19 @@ export async function getTrendingHashtags(platform?: string, daysBack = 30, limi
     .slice(0, limit)
 }
 
-export async function getTrendingSounds(daysBack = 30, limit = 20) {
+export async function getTrendingSounds(daysBack = 30, limit = 20, clientId?: string) {
   const since = new Date()
   since.setDate(since.getDate() - daysBack)
 
+  const where: Record<string, unknown> = {
+    platform: 'tiktok',
+    soundName: { not: null },
+    scrapedAt: { gte: since },
+  }
+  if (clientId) where.competitor = { clientId }
+
   const posts = await db.organicPost.findMany({
-    where: {
-      platform: 'tiktok',
-      soundName: { not: null },
-      scrapedAt: { gte: since },
-    },
+    where,
     select: { soundName: true, views: true, likes: true },
   })
 
@@ -186,6 +195,7 @@ export async function saveOpportunity(data: {
   source: string
   urgency: string
   relatedPosts?: string[]
+  clientId?: string
 }) {
   return db.trendOpportunity.create({
     data: {
@@ -195,13 +205,18 @@ export async function saveOpportunity(data: {
       source: data.source,
       urgency: data.urgency,
       relatedPosts: data.relatedPosts ?? [],
+      clientId: data.clientId ?? null,
     },
   })
 }
 
-export async function getOpportunities(limit = 50, includeDismissed = false) {
+export async function getOpportunities(limit = 50, includeDismissed = false, clientId?: string) {
+  const where: Record<string, unknown> = {}
+  if (!includeDismissed) where.dismissed = false
+  if (clientId) where.clientId = clientId
+
   return db.trendOpportunity.findMany({
-    where: includeDismissed ? {} : { dismissed: false },
+    where,
     orderBy: { detectedAt: 'desc' },
     take: limit,
   })
