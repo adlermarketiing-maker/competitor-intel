@@ -171,6 +171,13 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       }
       for (const rw of retiredWinners) {
         await emit(jobDbId, 'progress', `⚠️ Winner retirado: anuncio ${rw.metaAdId} (${rw.daysActive} días activo)`)
+        // Telegram alert for winner retirement
+        if (rw.daysActive >= 10) {
+          try {
+            const { alertWinnerRetired } = await import('@/lib/telegram/alerts')
+            await alertWinnerRetired(competitor.name, rw.metaAdId, rw.daysActive, rw.headline)
+          } catch { /* ignore telegram errors */ }
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -182,6 +189,11 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       const { isLaunch, newAdsCount } = await detectLaunch(competitorId)
       if (isLaunch) {
         await emit(jobDbId, 'progress', `🚀 Lanzamiento detectado: ${newAdsCount} anuncios nuevos en los últimos 3 días`)
+        // Telegram alert
+        try {
+          const { alertLaunchDetected } = await import('@/lib/telegram/alerts')
+          await alertLaunchDetected(competitor.name, newAdsCount)
+        } catch { /* ignore telegram errors */ }
       }
     } catch { /* ignore */ }
 

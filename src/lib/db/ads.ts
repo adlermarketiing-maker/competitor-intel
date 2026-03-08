@@ -88,15 +88,15 @@ export async function markEliminatedAds(competitorId: string, scrapedMetaAdIds: 
       competitorId,
       metaAdId: { notIn: scrapedMetaAdIds },
     },
-    select: { id: true, metaAdId: true, startDate: true, stopDate: true, adStatus: true, daysActive: true },
+    select: { id: true, metaAdId: true, startDate: true, stopDate: true, adStatus: true, daysActive: true, headline: true },
   })
 
-  const retiredWinners: Array<{ metaAdId: string; daysActive: number }> = []
+  const retiredWinners: Array<{ metaAdId: string; daysActive: number; headline: string | null }> = []
 
   for (const ad of missingAds) {
     const daysActive = computeDaysActive(ad.startDate, ad.stopDate ?? now)
     if (ad.adStatus === 'winner') {
-      retiredWinners.push({ metaAdId: ad.metaAdId, daysActive })
+      retiredWinners.push({ metaAdId: ad.metaAdId, daysActive, headline: ad.headline })
     }
     // Mark as inactive and update daysActive, but keep winner status
     await db.ad.update({
