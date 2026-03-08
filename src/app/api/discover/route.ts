@@ -74,6 +74,17 @@ function scoreAdvertiser(a: DiscoveredAdvertiserRaw): number {
   return score
 }
 
+// ── Sanitize text for PostgreSQL (remove null bytes, broken hex escapes) ─────
+
+function sanitize(str: string | null | undefined): string | null {
+  if (!str) return null
+  return str
+    .replace(/\x00/g, '')           // null bytes
+    .replace(/\\x[0-9a-fA-F]?(?![0-9a-fA-F])/g, '') // broken \x hex escapes
+    .replace(/\\u[0-9a-fA-F]{0,3}(?![0-9a-fA-F])/g, '') // broken \u escapes
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '') // control chars except \t \n \r
+}
+
 // ── API Routes ──────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -153,15 +164,15 @@ export async function POST(req: NextRequest) {
           advertisersFound: filtered.length,
         })
 
-        // Build advertiser data — keep rich data light for the SSE payload
+        // Build advertiser data — sanitize text and keep payload light
         const advertisers = filtered.map((a) => ({
           pageId: a.pageId,
-          pageName: a.pageName,
+          pageName: sanitize(a.pageName) ?? 'Desconocido',
           adCount: a.ads.length,
-          sampleCopy: (a.adCopies[0] ?? '').slice(0, 200) || null,
+          sampleCopy: sanitize((a.adCopies[0] ?? '').slice(0, 200)) || null,
           sampleLandingUrl: [...a.landingUrls][0] ?? null,
           landingUrls: [...a.landingUrls].slice(0, 3),
-          adCopies: a.adCopies.slice(0, 3).map((c) => c.slice(0, 200)),
+          adCopies: a.adCopies.slice(0, 3).map((c) => sanitize(c.slice(0, 200)) ?? ''),
           adImages: a.adImages.slice(0, 3),
         }))
 
@@ -182,10 +193,10 @@ export async function POST(req: NextRequest) {
           await db.discoveredCompetitor.createMany({
             data: batch.map((a) => ({
               searchId: search.id,
-              pageName: a.pageName,
+              pageName: sanitize(a.pageName) ?? 'Desconocido',
               pageId: a.pageId || null,
               adCount: a.adCount,
-              sampleCopy: a.sampleCopy,
+              sampleCopy: sanitize(a.sampleCopy),
               sampleLandingUrl: a.sampleLandingUrl,
             })),
           })
