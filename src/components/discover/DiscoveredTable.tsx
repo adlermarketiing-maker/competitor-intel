@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useToast } from '@/contexts/ToastContext'
 
 export interface DiscoveredAdvertiser {
   id: string
@@ -34,6 +35,7 @@ function extractHostname(url: string): string {
 
 export default function DiscoveredTable({ advertisers }: DiscoveredTableProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set())
   const [addedIds, setAddedIds] = useState<Set<string>>(
     new Set(advertisers.filter((a) => a.competitorId).map((a) => a.id))
@@ -58,7 +60,7 @@ export default function DiscoveredTable({ advertisers }: DiscoveredTableProps) {
       setAddedIds((prev) => new Set([...prev, advertiser.id]))
       router.push(`/competitors/${json.competitorId}?jobId=${json.jobId}`)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al añadir competidor')
+      toast(err instanceof Error ? err.message : 'Error al anadir competidor', 'error')
     } finally {
       setAddingIds((prev) => {
         const next = new Set(prev)

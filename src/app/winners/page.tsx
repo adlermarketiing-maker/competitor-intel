@@ -72,10 +72,19 @@ export default function WinnersPage() {
       </div>
 
       {error ? (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>
       ) : loading ? (
-        <div className="flex justify-center py-16">
-          <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+        <div className="space-y-3 animate-skeleton">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-100 p-5 flex items-center gap-4">
+              <div className="w-10 h-10 bg-slate-200 rounded-xl flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-slate-200 rounded-full w-40" />
+                <div className="h-3 bg-slate-100 rounded-full w-28" />
+              </div>
+              <div className="w-32 h-2 bg-slate-100 rounded-full" />
+            </div>
+          ))}
         </div>
       ) : view === 'ranking' ? (
         groups.length === 0 ? (

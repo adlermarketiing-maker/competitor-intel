@@ -152,8 +152,27 @@ export default function MarketPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      <div className="p-8 max-w-[1400px]">
+        <div className="mb-6">
+          <div className="h-7 bg-slate-200 rounded-lg w-52 mb-2 animate-skeleton" />
+          <div className="h-4 bg-slate-100 rounded w-64 animate-skeleton" />
+        </div>
+        <div className="flex gap-6 animate-skeleton">
+          <div className="w-64 space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-xl border border-slate-100 p-3 space-y-2">
+                <div className="h-3.5 bg-slate-200 rounded-full w-3/4" />
+                <div className="h-2.5 bg-slate-100 rounded-full w-1/2" />
+              </div>
+            ))}
+          </div>
+          <div className="flex-1 bg-white rounded-2xl border border-slate-100 p-6 space-y-4">
+            <div className="h-5 bg-slate-200 rounded-lg w-48" />
+            <div className="h-3 bg-slate-100 rounded-full w-full" />
+            <div className="h-3 bg-slate-100 rounded-full w-3/4" />
+            <div className="h-3 bg-slate-100 rounded-full w-5/6" />
+          </div>
+        </div>
       </div>
     )
   }

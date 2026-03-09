@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useClient } from '@/contexts/ClientContext'
+import { useToast } from '@/contexts/ToastContext'
 import type { Client } from '@/types/client'
 
 export default function ClientsPage() {
   const { refreshClients, selectClient } = useClient()
+  const { toast } = useToast()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -92,7 +94,7 @@ export default function ClientsPage() {
       await refreshClients()
       await fetchClients()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error')
+      toast(err instanceof Error ? err.message : 'Error al guardar', 'error')
     } finally {
       setSaving(false)
     }
@@ -131,7 +133,7 @@ export default function ClientsPage() {
         avatarDesc: data.avatarDesc || f.avatarDesc,
       }))
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al analizar')
+      toast(err instanceof Error ? err.message : 'Error al analizar', 'error')
     } finally {
       setAnalyzing(false)
     }
@@ -139,8 +141,20 @@ export default function ClientsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      <div className="p-8 max-w-3xl mx-auto">
+        <div className="mb-8">
+          <div className="h-7 bg-slate-200 rounded-lg w-48 mb-2 animate-skeleton" />
+          <div className="h-4 bg-slate-100 rounded w-24 animate-skeleton" />
+        </div>
+        <div className="space-y-3 animate-skeleton">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-100 p-5 space-y-3">
+              <div className="h-4 bg-slate-200 rounded-full w-40" />
+              <div className="h-3 bg-slate-100 rounded-full w-full" />
+              <div className="h-3 bg-slate-100 rounded-full w-2/3" />
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { useToast } from '@/contexts/ToastContext'
 
 type LatestJob = {
   status: string
@@ -44,6 +45,7 @@ function getInitials(name: string) {
 
 export default function CompetitorTable({ competitors, onAddClick }: CompetitorTableProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [scrapingIds, setScrapingIds] = useState<Set<string>>(new Set())
 
   const handleScrape = async (e: React.MouseEvent, id: string) => {
@@ -59,7 +61,7 @@ export default function CompetitorTable({ competitors, onAddClick }: CompetitorT
       if (!res.ok) throw new Error(json.error)
       router.push(`/competitors/${id}?jobId=${json.jobId}`)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al lanzar scrape')
+      toast(err instanceof Error ? err.message : 'Error al lanzar scrape', 'error')
       setScrapingIds((prev) => {
         const next = new Set(prev)
         next.delete(id)

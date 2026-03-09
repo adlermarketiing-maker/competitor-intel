@@ -7,6 +7,7 @@ import AdCard from '@/components/ads/AdCard'
 import LandingPageCard from '@/components/landings/LandingPageCard'
 import ScrapeProgressBanner from '@/components/competitors/ScrapeProgressBanner'
 import FunnelHackingSection from '@/components/competitors/FunnelHackingSection'
+import { useToast } from '@/contexts/ToastContext'
 import type { Ad, Competitor, LandingPage } from '@/types/competitor'
 import type { ScrapeJob } from '@/types/scrape'
 
@@ -34,6 +35,7 @@ export default function CompetitorProfilePage() {
   const { id } = useParams<{ id: string }>()
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { toast } = useToast()
   const jobIdParam = searchParams.get('jobId')
 
   const [data, setData] = useState<CompetitorData | null>(null)
@@ -72,7 +74,7 @@ export default function CompetitorProfilePage() {
       if (!res.ok) throw new Error(json.error)
       setCurrentJobId(json.jobId)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al lanzar scrape')
+      toast(err instanceof Error ? err.message : 'Error al lanzar scrape', 'error')
       setScraping(false)
     }
   }
@@ -89,7 +91,7 @@ export default function CompetitorProfilePage() {
       if (!res.ok) throw new Error('Error al resetear')
       await loadData()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al resetear')
+      toast(err instanceof Error ? err.message : 'Error al resetear', 'error')
     } finally {
       setResetting(false)
     }
@@ -108,8 +110,33 @@ export default function CompetitorProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      <div className="p-8 animate-skeleton">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-12 h-12 bg-slate-200 rounded-xl" />
+          <div className="space-y-2">
+            <div className="h-6 bg-slate-200 rounded-lg w-48" />
+            <div className="h-3 bg-slate-100 rounded-full w-32" />
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-4 mb-8">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-100 p-5">
+              <div className="h-3 bg-slate-200 rounded-full w-2/3 mb-3" />
+              <div className="h-6 bg-slate-200 rounded-lg w-1/3" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-100 p-5">
+              <div className="h-3 bg-slate-200 rounded-full w-1/3 mb-4" />
+              <div className="space-y-2">
+                <div className="h-3 bg-slate-100 rounded-full w-full" />
+                <div className="h-3 bg-slate-100 rounded-full w-3/4" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

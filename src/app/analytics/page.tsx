@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useClient } from '@/contexts/ClientContext'
+import { SkeletonStats } from '@/components/shared/Skeleton'
 
 /* ── Types ── */
 interface DistributionItem {
@@ -195,8 +196,12 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      <div className="p-8 max-w-[1400px]">
+        <div className="mb-6">
+          <div className="h-7 bg-slate-200 rounded-lg w-56 mb-2 animate-skeleton" />
+          <div className="h-4 bg-slate-100 rounded w-40 animate-skeleton" />
+        </div>
+        <SkeletonStats count={5} />
       </div>
     )
   }

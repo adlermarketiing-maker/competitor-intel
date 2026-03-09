@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { Competitor } from '@/types/competitor'
+import { useToast } from '@/contexts/ToastContext'
 
 interface Props {
   competitor: Competitor
@@ -24,6 +25,7 @@ const FUNNEL_FIELDS = [
 type FieldKey = typeof FUNNEL_FIELDS[number]['key']
 
 export default function FunnelHackingSection({ competitor, onUpdate }: Props) {
+  const { toast } = useToast()
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const buildValues = (comp: Competitor) => {
@@ -59,9 +61,10 @@ export default function FunnelHackingSection({ competitor, onUpdate }: Props) {
       })
       if (!res.ok) throw new Error('Error al guardar')
       setEditing(false)
+      toast('Cambios guardados', 'success')
       onUpdate()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al guardar')
+      toast(err instanceof Error ? err.message : 'Error al guardar', 'error')
     } finally {
       setSaving(false)
     }
@@ -77,7 +80,7 @@ export default function FunnelHackingSection({ competitor, onUpdate }: Props) {
       }
       onUpdate()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al analizar')
+      toast(err instanceof Error ? err.message : 'Error al analizar', 'error')
     } finally {
       setSaving(false)
     }

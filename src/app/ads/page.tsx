@@ -284,8 +284,17 @@ export default function AdsPage() {
       {error ? (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm mb-4">{error}</div>
       ) : loading ? (
-        <div className="flex justify-center py-16">
-          <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-skeleton">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <div className="aspect-video bg-slate-200" />
+              <div className="p-4 space-y-3">
+                <div className="h-3 bg-slate-200 rounded-full w-3/4" />
+                <div className="h-2.5 bg-slate-100 rounded-full w-full" />
+                <div className="h-2.5 bg-slate-100 rounded-full w-1/2" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : !data || data.ads.length === 0 ? (
         <EmptyState

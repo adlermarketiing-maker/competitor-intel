@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useClient } from '@/contexts/ClientContext'
+import { useToast } from '@/contexts/ToastContext'
+import { SkeletonGrid } from '@/components/shared/Skeleton'
 
 interface OrganicPost {
   id: string
@@ -265,6 +267,7 @@ function OpportunityCard({ opp, onDismiss }: { opp: Opportunity; onDismiss: (id:
 
 export default function TrendsPage() {
   const { selectedClientId } = useClient()
+  const { toast } = useToast()
   const [tab, setTab] = useState<Tab>('all')
   const [posts, setPosts] = useState<OrganicPost[]>([])
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
@@ -346,11 +349,13 @@ export default function TrendsPage() {
       })
       const data = await res.json()
       if (data.error) {
-        alert(data.error)
+        toast(data.error, 'error')
       } else {
+        toast(`${data.saved} posts guardados de ${data.platform}`, 'success')
         await fetchPosts()
       }
     } catch (err) {
+      toast('Error al escanear contenido', 'error')
       console.error('[Trends] Error scraping:', err)
     }
     setScraping(false)
@@ -365,7 +370,9 @@ export default function TrendsPage() {
         body: JSON.stringify({ action: 'generate', clientId: selectedClientId || undefined }),
       })
       await fetchOpportunities()
+      toast('Oportunidades generadas', 'success')
     } catch (err) {
+      toast('Error al generar oportunidades', 'error')
       console.error('[Trends] Error generating opportunities:', err)
     }
     setGenerating(false)
@@ -550,9 +557,7 @@ export default function TrendsPage() {
           )}
         </div>
       ) : loading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <SkeletonGrid count={6} />
       ) : posts.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
           <div className="w-14 h-14 bg-violet-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
