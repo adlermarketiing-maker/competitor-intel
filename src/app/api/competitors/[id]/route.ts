@@ -35,6 +35,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const exists = await getCompetitor(id)
+    if (!exists) {
+      return NextResponse.json({ error: 'Competitor not found' }, { status: 404 })
+    }
     await deleteCompetitor(id)
     return NextResponse.json({ ok: true })
   } catch (err) {

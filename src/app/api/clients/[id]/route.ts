@@ -57,6 +57,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const exists = await getClient(id)
+    if (!exists) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    }
     await deleteClient(id)
     return NextResponse.json({ ok: true })
   } catch (err) {
