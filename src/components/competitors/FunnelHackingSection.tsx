@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Competitor } from '@/types/competitor'
 
 interface Props {
@@ -26,16 +26,24 @@ type FieldKey = typeof FUNNEL_FIELDS[number]['key']
 export default function FunnelHackingSection({ competitor, onUpdate }: Props) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [values, setValues] = useState<Record<string, string>>(() => {
+  const buildValues = (comp: Competitor) => {
     const v: Record<string, string> = {}
     for (const f of FUNNEL_FIELDS) {
-      v[f.key] = (competitor[f.key as keyof Competitor] as string) || ''
+      v[f.key] = (comp[f.key as keyof Competitor] as string) || ''
     }
-    v.funnelUrl = competitor.funnelUrl || ''
-    v.competitorType = competitor.competitorType || ''
-    v.youtubeUrl = competitor.youtubeUrl || ''
+    v.funnelUrl = comp.funnelUrl || ''
+    v.competitorType = comp.competitorType || ''
+    v.youtubeUrl = comp.youtubeUrl || ''
     return v
-  })
+  }
+
+  const [values, setValues] = useState<Record<string, string>>(() => buildValues(competitor))
+
+  // Reset form values when competitor prop changes (e.g. after re-analyze or navigation)
+  useEffect(() => {
+    setValues(buildValues(competitor))
+    setEditing(false)
+  }, [competitor.id, competitor.funnelAnalyzedAt])
 
   const hasAnyData = FUNNEL_FIELDS.some(
     (f) => !!(competitor[f.key as keyof Competitor])

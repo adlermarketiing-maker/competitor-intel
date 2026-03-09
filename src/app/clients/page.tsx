@@ -8,6 +8,7 @@ export default function ClientsPage() {
   const { refreshClients, selectClient } = useClient()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -27,11 +28,13 @@ export default function ClientsPage() {
   const fetchClients = async () => {
     try {
       const res = await fetch('/api/clients')
-      if (res.ok) {
-        const data = await res.json()
-        setClients(data)
-      }
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error(`Error ${res.status}`)
+      const data = await res.json()
+      setClients(data)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar clientes')
+    }
     setLoading(false)
   }
 
@@ -138,6 +141,14 @@ export default function ClientsPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 max-w-3xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
       </div>
     )
   }

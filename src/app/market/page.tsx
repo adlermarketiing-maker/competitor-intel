@@ -116,14 +116,16 @@ export default function MarketPage() {
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([])
   const [selectedAnalysis, setSelectedAnalysis] = useState<MarketAnalysis | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [competitorFilter, setCompetitorFilter] = useState('')
 
   useEffect(() => {
+    setError(null)
     const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
     Promise.all([
-      fetch(`/api/market-analysis${cParam}`).then((r) => r.json()),
-      fetch(`/api/competitors${cParam}`).then((r) => r.json()),
+      fetch(`/api/market-analysis${cParam}`).then((r) => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json() }),
+      fetch(`/api/competitors${cParam}`).then((r) => r.json()).catch(() => []),
     ]).then(([analysesData, comps]) => {
       if (Array.isArray(analysesData)) {
         setAnalyses(analysesData)
@@ -131,7 +133,7 @@ export default function MarketPage() {
       }
       if (Array.isArray(comps)) setCompetitors(comps)
       setLoading(false)
-    }).catch(() => setLoading(false))
+    }).catch((err) => { setError(err.message); setLoading(false) })
   }, [selectedClientId])
 
   const filteredAnalyses = competitorFilter
@@ -152,6 +154,14 @@ export default function MarketPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
       </div>
     )
   }

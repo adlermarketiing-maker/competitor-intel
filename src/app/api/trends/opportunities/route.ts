@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'generate') {
       if (!process.env.ANTHROPIC_API_KEY) {
-        return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 500 })
+        return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 400 })
       }
 
       const insights = await analyzeTrendsVsAds(clientId)

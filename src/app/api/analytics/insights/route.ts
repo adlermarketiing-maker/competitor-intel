@@ -93,6 +93,10 @@ Responde SOLO con el análisis, sin preámbulos.`
       .map((block) => block.text)
       .join('')
 
+    if (!text.trim()) {
+      return NextResponse.json({ insights: 'No se pudieron generar insights. Inténtalo de nuevo.' })
+    }
+
     return NextResponse.json({ insights: text })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server'
-import { getScrapeJob } from '@/lib/db/jobs'
 import { getLatestJobForCompetitor } from '@/lib/db/jobs'
 import { isRedisAvailable } from '@/lib/queue/bullmq'
 

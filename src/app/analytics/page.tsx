@@ -152,6 +152,7 @@ export default function AnalyticsPage() {
   const { selectedClientId } = useClient()
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([])
   const [competitorId, setCompetitorId] = useState('')
   const [insights, setInsights] = useState<string | null>(null)
@@ -167,14 +168,15 @@ export default function AnalyticsPage() {
 
   const loadData = useCallback(() => {
     setLoading(true)
+    setError(null)
     const params = new URLSearchParams()
     if (selectedClientId) params.set('clientId', selectedClientId)
     if (competitorId) params.set('competitorId', competitorId)
     const qs = params.toString() ? `?${params}` : ''
     fetch(`/api/analytics${qs}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json() })
       .then((d) => { setData(d); setLoading(false) })
-      .catch(() => setLoading(false))
+      .catch((err) => { setError(err.message); setLoading(false) })
   }, [competitorId, selectedClientId])
 
   useEffect(() => { loadData() }, [loadData])
@@ -199,10 +201,12 @@ export default function AnalyticsPage() {
     )
   }
 
-  if (!data) {
+  if (error || !data) {
     return (
       <div className="p-8">
-        <p className="text-red-600">Error cargando analytics</p>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
+          {error || 'Error cargando analytics'}
+        </div>
       </div>
     )
   }

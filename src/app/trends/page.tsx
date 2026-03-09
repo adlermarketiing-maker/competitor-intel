@@ -325,7 +325,8 @@ export default function TrendsPage() {
       fetchPosts(),
       fetchOpportunities(),
     ]).then(() => setLoading(false))
-  }, [selectedClientId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPosts/fetchOpportunities are useCallback with selectedClientId dep; including them would cause infinite loop
+  }, [selectedClientId])
 
   useEffect(() => {
     if (tab !== 'opportunities') fetchPosts()
