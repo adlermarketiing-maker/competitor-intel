@@ -16,8 +16,35 @@ export interface ExtractedContent {
 export function extractContent(html: string, pageUrl: string): ExtractedContent {
   const $ = cheerio.load(html)
 
-  // Remove noise
-  $('script, style, noscript, iframe, nav, footer, header').remove()
+  // Extract outbound links BEFORE removing elements (nav/footer may contain important links)
+  const outboundLinks: string[] = []
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href')
+    if (!href) return
+    try {
+      const resolved = new URL(href, pageUrl).href
+      if (resolved.startsWith('http')) {
+        outboundLinks.push(resolved)
+      }
+    } catch { /* ignore malformed URLs */ }
+  })
+
+  // Also extract links from data attributes (some SPAs use data-href, data-url, etc.)
+  $('[data-href], [data-url], [data-link]').each((_, el) => {
+    const href = $(el).attr('data-href') || $(el).attr('data-url') || $(el).attr('data-link')
+    if (!href) return
+    try {
+      const resolved = new URL(href, pageUrl).href
+      if (resolved.startsWith('http')) outboundLinks.push(resolved)
+    } catch { /* ignore */ }
+  })
+
+  // Extract links from __NEXT_DATA__ (Linktree and other Next.js SPAs)
+  const nextDataLinks = extractLinksFromNextData(html)
+  outboundLinks.push(...nextDataLinks)
+
+  // Now remove noise for text extraction
+  $('script, style, noscript, iframe').remove()
 
   const title = $('title').first().text().trim() || null
 
@@ -32,7 +59,7 @@ export function extractContent(html: string, pageUrl: string): ExtractedContent 
     .filter(Boolean)
     .slice(0, 10)
 
-  // CTA buttons: look for buttons, links with CTA-like classes, and input[type=submit]
+  // CTA buttons
   const ctaSelectors = [
     'button',
     'input[type=submit]',
@@ -53,6 +80,9 @@ export function extractContent(html: string, pageUrl: string): ExtractedContent 
   }
   const ctaTexts = Array.from(ctaTextsRaw).slice(0, 10)
 
+  // Remove nav/footer/header AFTER extracting links and CTAs but before body text
+  $('nav, footer, header').remove()
+
   // Prices
   const fullText = $('body').text()
   const priceMatches = fullText.match(PRICE_REGEX) || []
@@ -64,28 +94,6 @@ export function extractContent(html: string, pageUrl: string): ExtractedContent 
   // Body text (first 3000 chars of meaningful text)
   const bodyText = fullText.replace(/\s+/g, ' ').trim().slice(0, 3000)
 
-  // Outbound links
-  const pageHostname = (() => {
-    try {
-      return new URL(pageUrl).hostname
-    } catch {
-      return ''
-    }
-  })()
-
-  const outboundLinks: string[] = []
-  $('a[href]').each((_, el) => {
-    const href = $(el).attr('href')
-    if (!href) return
-    try {
-      const resolved = new URL(href, pageUrl).href
-      // Include same-domain links that look like funnel steps, and external payment platforms
-      if (resolved.startsWith('http')) {
-        outboundLinks.push(resolved)
-      }
-    } catch {}
-  })
-
   return {
     title,
     h1Texts,
@@ -94,6 +102,71 @@ export function extractContent(html: string, pageUrl: string): ExtractedContent 
     prices,
     offerName,
     bodyText,
-    outboundLinks: [...new Set(outboundLinks)].slice(0, 50),
+    outboundLinks: [...new Set(outboundLinks)].slice(0, 100),
+  }
+}
+
+/**
+ * Extract links from __NEXT_DATA__ JSON embedded in page HTML.
+ * Linktree and other Next.js apps store all link data here even before
+ * client-side JS hydration. This lets us find links without needing a browser.
+ */
+export function extractLinksFromNextData(html: string): string[] {
+  const links: string[] = []
+
+  try {
+    // Match __NEXT_DATA__ script tag
+    const match = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i)
+    if (!match?.[1]) return links
+
+    const data = JSON.parse(match[1])
+    extractUrlsFromObject(data, links)
+  } catch { /* ignore parse errors */ }
+
+  // Also try to find JSON-LD structured data
+  try {
+    const ldMatches = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)
+    for (const m of ldMatches) {
+      try {
+        const ld = JSON.parse(m[1])
+        extractUrlsFromObject(ld, links)
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+
+  return [...new Set(links)]
+}
+
+/** Recursively find URL strings in a nested object/array */
+function extractUrlsFromObject(obj: unknown, links: string[], depth = 0): void {
+  if (depth > 8) return // prevent infinite recursion
+  if (!obj || typeof obj !== 'object') {
+    if (typeof obj === 'string' && obj.startsWith('http') && !obj.includes(' ')) {
+      try {
+        new URL(obj) // validate it's a URL
+        links.push(obj)
+      } catch { /* not a valid URL */ }
+    }
+    return
+  }
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      extractUrlsFromObject(item, links, depth + 1)
+    }
+    return
+  }
+
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    // Focus on keys that likely contain URLs
+    const keyLower = key.toLowerCase()
+    if (keyLower.includes('url') || keyLower === 'href' || keyLower === 'link' ||
+        keyLower === 'src' || keyLower === 'links' || keyLower === 'destination') {
+      extractUrlsFromObject(value, links, depth + 1)
+    }
+    // Also recurse into arrays and nested objects (props, pageProps, etc.)
+    if (typeof value === 'object' && value !== null) {
+      extractUrlsFromObject(value, links, depth + 1)
+    }
   }
 }

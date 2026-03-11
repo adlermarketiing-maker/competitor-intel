@@ -1,12 +1,13 @@
 import puppeteer, { Browser } from 'puppeteer'
-import { extractContent } from './extractor'
+import { extractContent, extractLinksFromNextData } from './extractor'
+import { scrapePageWithFetch } from './fetchScraper'
 import type { ScrapedPageContent } from '@/types/scrape'
 
 let browserInstance: Browser | null = null
+let puppeteerAvailable: boolean | null = null // Cache: null=unknown, true/false=tested
 
 async function getBrowser(): Promise<Browser> {
   if (browserInstance && !browserInstance.connected) {
-    // Previous browser disconnected — clean up reference
     try { await browserInstance.close() } catch { /* already dead */ }
     browserInstance = null
   }
@@ -36,7 +37,11 @@ export async function closeBrowser(): Promise<void> {
   }
 }
 
-export async function scrapePage(url: string): Promise<ScrapedPageContent> {
+/** Internal: scrape with Puppeteer (requires Chrome). Throws if Chrome unavailable. */
+async function scrapeWithPuppeteer(
+  url: string,
+  options?: { waitUntil?: 'domcontentloaded' | 'networkidle2' }
+): Promise<ScrapedPageContent> {
   const browser = await getBrowser()
   const page = await browser.newPage()
   let finalUrl = url
@@ -49,19 +54,19 @@ export async function scrapePage(url: string): Promise<ScrapedPageContent> {
     await page.setViewport({ width: 1280, height: 800 })
 
     const response = await page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 20000,
+      waitUntil: options?.waitUntil || 'domcontentloaded',
+      timeout: 25000,
     })
 
     httpStatus = response?.status() ?? 200
     finalUrl = page.url()
 
-    // Wait a bit for any lazy-loaded content
-    await new Promise((r) => setTimeout(r, 1500))
+    // Wait for lazy-loaded content
+    await new Promise((r) => setTimeout(r, 2000))
 
     const html = await page.content()
 
-    // Screenshot as base64 data URL (persists in DB, works on Railway ephemeral filesystem)
+    // Screenshot as base64 data URL
     const screenshotBuffer = await page.screenshot({
       type: 'jpeg',
       quality: 50,
@@ -72,6 +77,13 @@ export async function scrapePage(url: string): Promise<ScrapedPageContent> {
 
     const extracted = extractContent(html, finalUrl)
 
+    // Also extract links from __NEXT_DATA__ for JS-rendered pages
+    const nextDataLinks = extractLinksFromNextData(html)
+    if (nextDataLinks.length > 0) {
+      const allLinks = [...new Set([...extracted.outboundLinks, ...nextDataLinks])]
+      extracted.outboundLinks = allLinks.slice(0, 100)
+    }
+
     return {
       url: finalUrl,
       originalUrl: url,
@@ -79,24 +91,63 @@ export async function scrapePage(url: string): Promise<ScrapedPageContent> {
       screenshotPath,
       httpStatus,
     }
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err)
-    return {
-      url: finalUrl,
-      originalUrl: url,
-      title: null,
-      h1Texts: [],
-      h2Texts: [],
-      ctaTexts: [],
-      prices: [],
-      offerName: null,
-      bodyText: '',
-      screenshotPath: null,
-      outboundLinks: [],
-      httpStatus,
-      error,
-    }
   } finally {
     await page.close()
   }
+}
+
+/**
+ * Scrape a page. Tries Puppeteer first (screenshots + JS rendering),
+ * automatically falls back to fetch + cheerio if Chrome is unavailable.
+ */
+export async function scrapePage(
+  url: string,
+  options?: { waitUntil?: 'domcontentloaded' | 'networkidle2' }
+): Promise<ScrapedPageContent> {
+  // If Puppeteer already confirmed unavailable, use fetch directly
+  if (puppeteerAvailable === false) {
+    return scrapePageWithFetch(url)
+  }
+
+  try {
+    const result = await scrapeWithPuppeteer(url, options)
+    puppeteerAvailable = true
+
+    // If Puppeteer got an HTTP error or empty content, try fetch as supplement
+    if (result.httpStatus >= 400 || (!result.bodyText && result.outboundLinks.length === 0)) {
+      const fetchResult = await scrapePageWithFetch(url)
+      if (fetchResult.outboundLinks.length > result.outboundLinks.length || fetchResult.bodyText.length > result.bodyText.length) {
+        // Merge: keep Puppeteer screenshot but use better fetch content
+        return {
+          ...fetchResult,
+          screenshotPath: result.screenshotPath,
+          httpStatus: result.httpStatus || fetchResult.httpStatus,
+        }
+      }
+    }
+
+    return result
+  } catch (err) {
+    // Puppeteer launch/runtime failure (no Chrome, crash, etc.)
+    const errMsg = err instanceof Error ? err.message : String(err)
+
+    // If this was a launch failure, cache it so we don't retry for every page
+    if (errMsg.includes('Could not find') || errMsg.includes('ENOENT') ||
+        errMsg.includes('spawn') || errMsg.includes('Failed to launch') ||
+        errMsg.includes('Chromium') || errMsg.includes('chrome') ||
+        errMsg.includes('executablePath')) {
+      console.warn(`[Scraper] Puppeteer unavailable (${errMsg.slice(0, 100)}), switching to fetch mode`)
+      puppeteerAvailable = false
+    } else {
+      console.warn(`[Scraper] Puppeteer error for ${url}: ${errMsg.slice(0, 200)}`)
+    }
+
+    // Fall back to fetch
+    return scrapePageWithFetch(url)
+  }
+}
+
+/** Check if Puppeteer/Chrome is available without actually scraping a page */
+export function isPuppeteerAvailable(): boolean | null {
+  return puppeteerAvailable
 }

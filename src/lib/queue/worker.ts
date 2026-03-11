@@ -8,12 +8,17 @@ import { upsertAd, markEliminatedAds, detectLaunch } from '@/lib/db/ads'
 import { upsertLandingPage } from '@/lib/db/landings'
 import { updateScrapeJob } from '@/lib/db/jobs'
 import { getCompetitor, updateCompetitor } from '@/lib/db/competitors'
-import { scrapePage } from '@/lib/scraper/puppeteer'
+import { scrapePage, isPuppeteerAvailable } from '@/lib/scraper/puppeteer'
 import { isSameDomain, isSocialMediaUrl, isLinkInBioService } from '@/lib/utils/urls'
 import type { ScrapeJobData, JobStatus } from '@/types/scrape'
 
 async function emit(jobId: string, type: string, message: string, extra?: object) {
-  await publishJobEvent(jobId, { type, message, ...extra })
+  try {
+    await publishJobEvent(jobId, { type, message, ...extra })
+  } catch {
+    // Don't let Redis failures break the scraping pipeline
+    console.warn(`[Worker] Failed to emit event: ${message}`)
+  }
 }
 
 /** Strip fragment (#...) and trailing slash so url.com and url.com#precio are the same */
@@ -21,7 +26,6 @@ function normalizeUrl(url: string): string {
   try {
     const u = new URL(url)
     u.hash = ''
-    // Remove trailing slash except for root
     let str = u.toString()
     if (str.endsWith('/') && u.pathname !== '/') str = str.slice(0, -1)
     return str
@@ -34,25 +38,26 @@ function normalizeUrl(url: string): string {
 function isJunkUrl(url: string): boolean {
   try {
     const u = new URL(url)
-    const hostname = u.hostname.replace(/^www\./, '')
     const path = u.pathname.toLowerCase()
-    // Instagram login / profile pages (not useful)
+    const hostname = u.hostname.replace(/^www\./, '')
+    // Instagram login / profile pages
     if (hostname === 'instagram.com' || hostname === 'www.instagram.com') return true
+    // Facebook pages (not useful as landing)
+    if (hostname === 'facebook.com' || hostname === 'www.facebook.com') return true
     // Privacy, legal, cookies pages
     if (/\/(privacy|privacidad|legal|terms|terminos|cookies|aviso-legal|politica-de-privacidad|cookie-policy|terms-of-service)\b/i.test(path)) return true
     // Non-page resources
-    if (/\.(pdf|zip|mp3|mp4|avi|mov|doc|docx|xls|xlsx)$/i.test(path)) return true
+    if (/\.(pdf|zip|mp3|mp4|avi|mov|doc|docx|xls|xlsx|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(path)) return true
     // mailto/tel/javascript
     if (/^(mailto|tel|javascript):/.test(url)) return true
+    // Empty path with just fragment
+    if (path === '/' && u.hash && !u.search) return false // root is ok
     return false
   } catch {
     return false
   }
 }
 
-/**
- * Returns true if the page name found in Meta Ad Library reasonably matches the competitor name.
- */
 function pageNameMatchesCompetitor(pageName: string, competitorName: string): boolean {
   if (!pageName) return false
   const normalize = (s: string) =>
@@ -172,7 +177,6 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       }
       for (const rw of retiredWinners) {
         await emit(jobDbId, 'progress', `⚠️ Winner retirado: anuncio ${rw.metaAdId} (${rw.daysActive} días activo)`)
-        // Telegram alert for winner retirement
         if (rw.daysActive >= 10) {
           try {
             const { alertWinnerRetired } = await import('@/lib/telegram/alerts')
@@ -190,7 +194,6 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       const { isLaunch, newAdsCount } = await detectLaunch(competitorId)
       if (isLaunch) {
         await emit(jobDbId, 'progress', `🚀 Lanzamiento detectado: ${newAdsCount} anuncios nuevos en los últimos 3 días`)
-        // Telegram alert
         try {
           const { alertLaunchDetected } = await import('@/lib/telegram/alerts')
           await alertLaunchDetected(competitor.name, newAdsCount)
@@ -233,7 +236,6 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
             } catch (err) {
               console.error(`[Worker] Ad analysis error (${ad.id}):`, err instanceof Error ? err.message : err)
             }
-            // Small delay to avoid rate limits
             await new Promise((r) => setTimeout(r, 300))
           }
           await emit(jobDbId, 'progress', `IA: ${analyzed} anuncios analizados con tags`)
@@ -251,8 +253,12 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     try {
       await emit(jobDbId, 'progress', `Extrayendo redes sociales desde ${freshCompetitor.websiteUrl}...`)
       const siteContent = await scrapePage(freshCompetitor.websiteUrl)
-      const socialUpdates: Record<string, string> = {}
 
+      if (siteContent.error) {
+        await emit(jobDbId, 'progress', `Aviso al scrapear web: ${siteContent.error}`)
+      }
+
+      const socialUpdates: Record<string, string> = {}
       for (const link of siteContent.outboundLinks) {
         try {
           const parsed = new URL(link)
@@ -269,21 +275,17 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
               socialUpdates.facebookUrl = clean
             }
           }
-        } catch {
-          // ignore malformed URLs
-        }
+        } catch { /* ignore malformed URLs */ }
       }
 
       if (Object.keys(socialUpdates).length > 0) {
         await updateCompetitor(competitorId, socialUpdates)
         const found = Object.entries(socialUpdates).map(([k, v]) => `${k}: ${v}`).join(', ')
         await emit(jobDbId, 'progress', `Redes sociales encontradas en web: ${found}`)
-      } else {
-        await emit(jobDbId, 'progress', `Sin redes sociales en la web del competidor`)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      await emit(jobDbId, 'error', `Error extrayendo redes sociales de web: ${msg}`)
+      await emit(jobDbId, 'progress', `Error extrayendo redes sociales de web: ${msg}`)
     }
   }
 
@@ -299,7 +301,10 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       }
     }
 
-    // Source A: Landing URLs from ads
+    const mode = isPuppeteerAvailable() === false ? 'fetch' : 'puppeteer'
+    await emit(jobDbId, 'progress', `Modo de scraping: ${mode === 'fetch' ? 'fetch (sin Chrome)' : 'Chrome + fallback'}`)
+
+    // Source A: Landing URLs from ads (this always works — no scraping needed)
     const { db } = await import('@/lib/db/client')
     const ads = await db.ad.findMany({
       where: { competitorId, landingUrl: { not: null } },
@@ -310,7 +315,7 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
     }
     await emit(jobDbId, 'progress', `${discoveredUrls.size} URLs de anuncios`)
 
-    // Source B: Deep crawl of competitor's website (2 levels deep)
+    // Source B: Crawl competitor's website for internal links
     const latestComp = await getCompetitor(competitorId)
     if (latestComp?.websiteUrl) {
       try {
@@ -318,7 +323,11 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
         const siteContent = await scrapePage(latestComp.websiteUrl)
 
         // Save homepage as a landing page too
-        addUrl(siteContent.url, 'homepage')
+        addUrl(siteContent.url || latestComp.websiteUrl, 'homepage')
+
+        if (siteContent.error) {
+          await emit(jobDbId, 'progress', `Aviso homepage: ${siteContent.error}`)
+        }
 
         // Helper: collect internal links from a page's outbound links
         const collectInternalLinks = (outboundLinks: string[], baseUrl: string): string[] => {
@@ -330,7 +339,6 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
               }
             } catch { /* ignore */ }
           }
-          // Deduplicate by pathname
           return [...new Map(links.map((u) => {
             try { return [new URL(u).pathname, u] } catch { return [u, u] }
           })).values()]
@@ -344,8 +352,23 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
           addUrl(link, 'website')
         }
 
-        // Level 2: crawl each level-1 page to find deeper links
-        const level1ToCrawl = level1Links.slice(0, 20) // limit level-1 crawl
+        // Check for external links (payment platforms, link-in-bio, etc.)
+        for (const link of siteContent.outboundLinks) {
+          if (isLinkInBioService(link)) addUrl(link, 'linkinbio')
+          // Also add external non-social links that could be product/sales pages
+          try {
+            if (!isSameDomain(link, latestComp.websiteUrl) && !isSocialMediaUrl(link) && !isJunkUrl(link)) {
+              const hostname = new URL(link).hostname
+              // Skip common non-landing external domains
+              if (!/google\.|gstatic\.|googleapis\.|cloudflare\.|cdn\.|analytics\.|pixel\.|fonts\./i.test(hostname)) {
+                addUrl(link, 'external')
+              }
+            }
+          } catch { /* ignore */ }
+        }
+
+        // Level 2: crawl level-1 pages (limit to 15 for speed)
+        const level1ToCrawl = level1Links.slice(0, 15)
         let level2Count = 0
         for (const subUrl of level1ToCrawl) {
           try {
@@ -356,35 +379,28 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
               addUrl(link, 'website-deep')
               if (discoveredUrls.size > before) level2Count++
             }
-            // Check for link-in-bio in subpages too
             for (const link of subContent.outboundLinks) {
               if (isLinkInBioService(link)) addUrl(link, 'linkinbio')
             }
-            await new Promise((r) => setTimeout(r, 800))
+            await new Promise((r) => setTimeout(r, 500))
           } catch { /* ignore errors on individual subpages */ }
         }
         if (level2Count > 0) {
           await emit(jobDbId, 'progress', `${level2Count} links adicionales en subpáginas`)
         }
-
-        // Check for link-in-bio services in homepage outbound links
-        for (const link of siteContent.outboundLinks) {
-          if (isLinkInBioService(link)) addUrl(link, 'linkinbio')
-        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        await emit(jobDbId, 'error', `Error rastreando web: ${msg}`)
+        await emit(jobDbId, 'progress', `Error rastreando web: ${msg}`)
       }
     }
 
-    // Source C: Link-in-bio and Instagram bio link
+    // Source C: Instagram bio link
     const compForSocial = await getCompetitor(competitorId)
     if (compForSocial?.instagramUrl) {
       try {
         await emit(jobDbId, 'progress', `Buscando link en bio de Instagram...`)
         const igContent = await scrapePage(compForSocial.instagramUrl)
 
-        // Instagram pages often have the bio link as an outbound link
         for (const link of igContent.outboundLinks) {
           try {
             if (!isSocialMediaUrl(link)) {
@@ -398,27 +414,37 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       }
     }
 
-    // Source D: If we found link-in-bio pages, crawl them to find more landing pages
-    const linkInBioUrls = [...discoveredUrls.entries()]
-      .filter(([, source]) => source.includes('linkinbio'))
-      .map(([url]) => url)
+    // Source D: Crawl ALL link-in-bio pages (regardless of how they were discovered)
+    const linkInBioUrls = [...discoveredUrls.keys()].filter((url) => isLinkInBioService(url))
 
     for (const bioUrl of linkInBioUrls) {
       try {
         await emit(jobDbId, 'progress', `Rastreando link-in-bio: ${bioUrl}...`)
-        const bioContent = await scrapePage(bioUrl)
+        const bioContent = await scrapePage(bioUrl, { waitUntil: 'networkidle2' })
 
+        let linksFound = 0
         for (const link of bioContent.outboundLinks) {
           try {
-            if (!isSocialMediaUrl(link)) addUrl(link, 'linkinbio-link')
+            if (!isSocialMediaUrl(link) && !isJunkUrl(link)) {
+              const before = discoveredUrls.size
+              addUrl(link, 'linkinbio-link')
+              if (discoveredUrls.size > before) linksFound++
+            }
           } catch { /* ignore */ }
         }
-        await new Promise((r) => setTimeout(r, 800))
+        if (linksFound > 0) {
+          await emit(jobDbId, 'progress', `${linksFound} links descubiertos en link-in-bio`)
+        } else {
+          await emit(jobDbId, 'progress', `Link-in-bio scrapeado pero sin links adicionales (${bioContent.outboundLinks.length} links totales, ${bioContent.error || 'sin error'})`)
+        }
+        await new Promise((r) => setTimeout(r, 500))
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        await emit(jobDbId, 'error', `Error en link-in-bio ${bioUrl}: ${msg}`)
+        await emit(jobDbId, 'progress', `Error en link-in-bio ${bioUrl}: ${msg}`)
       }
     }
+
+    await emit(jobDbId, 'progress', `Total URLs descubiertas: ${discoveredUrls.size}`)
 
     // Build a map of landing URL -> ad ID for linking
     const urlToAdId = new Map<string, string>()
@@ -426,89 +452,105 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       if (ad.landingUrl) urlToAdId.set(normalizeUrl(ad.landingUrl), ad.id)
     }
 
-    // Scrape all discovered URLs first, then replace old data
-    await emit(jobDbId, 'progress', `${discoveredUrls.size} landing pages a scrapear...`)
-    let landingsDone = 0
-    const scrapedLandings: Array<{ url: string; adId: string | null; content: Awaited<ReturnType<typeof scrapePage>> }> = []
+    // ── Scrape all discovered URLs ──────────────────────────────────
+    if (discoveredUrls.size === 0) {
+      await emit(jobDbId, 'progress', 'No se encontraron URLs de landing pages para scrapear')
+    } else {
+      await emit(jobDbId, 'progress', `Scrapeando ${discoveredUrls.size} landing pages...`)
+      let landingsDone = 0
+      let landingsFailed = 0
+      const scrapedLandings: Array<{ url: string; adId: string | null; content: Awaited<ReturnType<typeof scrapePage>> }> = []
 
-    for (const [url, source] of discoveredUrls.entries()) {
-      try {
-        await emit(jobDbId, 'progress', `Scrapeando (${source}): ${url}`)
-        const content = await scrapePage(url)
+      for (const [url, source] of discoveredUrls.entries()) {
+        try {
+          const isLinkBio = isLinkInBioService(url)
+          const content = await scrapePage(url, isLinkBio ? { waitUntil: 'networkidle2' } : undefined)
 
-        // Normalize URL from Puppeteer (may add # fragments or trailing slashes)
-        content.url = normalizeUrl(content.url)
+          // Normalize URL from browser (may add fragments or trailing slashes)
+          content.url = normalizeUrl(content.url)
 
-        const adId = urlToAdId.get(url) ?? null
-        scrapedLandings.push({ url, adId, content })
+          const adId = urlToAdId.get(url) ?? null
+          scrapedLandings.push({ url, adId, content })
 
-        landingsDone++
-        await emit(jobDbId, 'progress', `Landing scrapeada (${landingsDone}/${discoveredUrls.size})`)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        await emit(jobDbId, 'error', `Error scrapeando ${url}: ${msg}`)
-      }
-
-      // Pause between pages
-      await new Promise((r) => setTimeout(r, 1000))
-    }
-
-    // Only delete old landings after successfully scraping new ones
-    if (scrapedLandings.length > 0) {
-      try {
-        await db.$transaction(async (tx) => {
-          await tx.landingPage.deleteMany({ where: { competitorId } })
-          for (const { adId, content } of scrapedLandings) {
-            await tx.landingPage.upsert({
-              where: { url: content.url },
-              update: {
-                competitorId,
-                adId,
-                originalUrl: content.originalUrl,
-                title: content.title,
-                h1Texts: content.h1Texts,
-                h2Texts: content.h2Texts,
-                ctaTexts: content.ctaTexts,
-                prices: content.prices,
-                offerName: content.offerName,
-                bodyText: content.bodyText,
-                screenshotPath: content.screenshotPath,
-                outboundLinks: content.outboundLinks,
-                httpStatus: content.httpStatus,
-                scrapeError: content.error ?? null,
-              },
-              create: {
-                competitorId,
-                adId,
-                url: content.url,
-                originalUrl: content.originalUrl,
-                title: content.title,
-                h1Texts: content.h1Texts,
-                h2Texts: content.h2Texts,
-                ctaTexts: content.ctaTexts,
-                prices: content.prices,
-                offerName: content.offerName,
-                bodyText: content.bodyText,
-                screenshotPath: content.screenshotPath,
-                outboundLinks: content.outboundLinks,
-                httpStatus: content.httpStatus,
-                scrapeError: content.error ?? null,
-              },
-            })
+          landingsDone++
+          if (landingsDone % 5 === 0 || landingsDone === discoveredUrls.size) {
+            await emit(jobDbId, 'progress', `Landing scrapeada (${landingsDone}/${discoveredUrls.size})`)
           }
-        })
-      } catch (err) {
-        console.error(`[Worker] Error saving landings (transaction):`, err instanceof Error ? err.message : err)
-        // Fallback: try individual upserts outside transaction
-        for (const { adId, content } of scrapedLandings) {
-          try {
-            await upsertLandingPage(competitorId, adId, content)
-          } catch (innerErr) {
-            console.error(`[Worker] Error saving landing ${content.url}:`, innerErr instanceof Error ? innerErr.message : innerErr)
-          }
+        } catch (err) {
+          landingsFailed++
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error(`[Worker] Error scraping ${url}: ${msg}`)
         }
+
+        // Pause between pages
+        await new Promise((r) => setTimeout(r, 600))
       }
-      await emit(jobDbId, 'progress', `${scrapedLandings.length} landings guardadas`)
+
+      if (landingsFailed > 0) {
+        await emit(jobDbId, 'progress', `${landingsFailed} landings fallaron al scrapear`)
+      }
+
+      // ── Save landing pages to database ──────────────────────────────
+      if (scrapedLandings.length > 0) {
+        await emit(jobDbId, 'progress', `Guardando ${scrapedLandings.length} landing pages...`)
+        try {
+          await db.$transaction(async (tx) => {
+            await tx.landingPage.deleteMany({ where: { competitorId } })
+            for (const { adId, content } of scrapedLandings) {
+              await tx.landingPage.upsert({
+                where: { url: content.url },
+                update: {
+                  competitorId,
+                  adId,
+                  originalUrl: content.originalUrl,
+                  title: content.title,
+                  h1Texts: content.h1Texts,
+                  h2Texts: content.h2Texts,
+                  ctaTexts: content.ctaTexts,
+                  prices: content.prices,
+                  offerName: content.offerName,
+                  bodyText: content.bodyText,
+                  screenshotPath: content.screenshotPath,
+                  outboundLinks: content.outboundLinks,
+                  httpStatus: content.httpStatus,
+                  scrapeError: content.error ?? null,
+                },
+                create: {
+                  competitorId,
+                  adId,
+                  url: content.url,
+                  originalUrl: content.originalUrl,
+                  title: content.title,
+                  h1Texts: content.h1Texts,
+                  h2Texts: content.h2Texts,
+                  ctaTexts: content.ctaTexts,
+                  prices: content.prices,
+                  offerName: content.offerName,
+                  bodyText: content.bodyText,
+                  screenshotPath: content.screenshotPath,
+                  outboundLinks: content.outboundLinks,
+                  httpStatus: content.httpStatus,
+                  scrapeError: content.error ?? null,
+                },
+              })
+            }
+          }, { timeout: 60000 }) // 60s timeout for large batches
+        } catch (err) {
+          console.error(`[Worker] Transaction failed, trying individual saves:`, err instanceof Error ? err.message : err)
+          await emit(jobDbId, 'progress', 'Error en guardado masivo, guardando individualmente...')
+          let savedCount = 0
+          for (const { adId, content } of scrapedLandings) {
+            try {
+              await upsertLandingPage(competitorId, adId, content)
+              savedCount++
+            } catch (innerErr) {
+              console.error(`[Worker] Error saving landing ${content.url}:`, innerErr instanceof Error ? innerErr.message : innerErr)
+            }
+          }
+          await emit(jobDbId, 'progress', `${savedCount}/${scrapedLandings.length} landings guardadas (fallback)`)
+        }
+        await emit(jobDbId, 'progress', `${scrapedLandings.length} landings guardadas`)
+      }
     }
   }
 
@@ -545,6 +587,8 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
         }
 
         await emit(jobDbId, 'progress', 'Funnel hacking: análisis IA completado')
+      } else {
+        await emit(jobDbId, 'progress', 'Sin landing pages para análisis de funnel')
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -564,7 +608,31 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
 }
 
 export function startWorker() {
-  const worker = new Worker<ScrapeJobData>('scrapeCompetitor', processScrapeJob, {
+  const worker = new Worker<ScrapeJobData>('scrapeCompetitor', async (job) => {
+    try {
+      await processScrapeJob(job)
+    } catch (err) {
+      // Ensure job status is ALWAYS updated even on unexpected errors
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[Worker] processScrapeJob crashed:`, msg)
+
+      try {
+        await updateScrapeJob(job.data.jobDbId, {
+          status: 'FAILED',
+          errorMessage: msg.slice(0, 500),
+          completedAt: new Date(),
+        })
+      } catch (dbErr) {
+        console.error(`[Worker] Failed to update job status after crash:`, dbErr)
+      }
+
+      try {
+        await emit(job.data.jobDbId, 'status', `Error: ${msg}`, { status: 'FAILED' })
+      } catch { /* ignore emit failure */ }
+
+      throw err // Re-throw so BullMQ knows the job failed
+    }
+  }, {
     connection: getRedisConnectionOpts(),
     concurrency: 1,
   })
@@ -577,7 +645,7 @@ export function startWorker() {
     if (job?.data?.jobDbId) {
       updateScrapeJob(job.data.jobDbId, {
         status: 'FAILED',
-        errorMessage: err.message,
+        errorMessage: err.message.slice(0, 500),
         completedAt: new Date(),
       }).catch((e) => console.error('[Worker] Failed to update job status:', e))
       publishJobEvent(job.data.jobDbId, {
