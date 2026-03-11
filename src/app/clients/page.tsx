@@ -115,14 +115,19 @@ export default function ClientsPage() {
     resetForm()
   }
 
+  const canAnalyze = form.websiteUrl.trim() || form.driveFolder.trim()
+
   const handleAnalyze = async () => {
-    if (!form.websiteUrl.trim()) return
+    if (!canAnalyze) return
     setAnalyzing(true)
     try {
       const res = await fetch('/api/clients/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteUrl: form.websiteUrl.trim() }),
+        body: JSON.stringify({
+          websiteUrl: form.websiteUrl.trim() || undefined,
+          driveFolder: form.driveFolder.trim() || undefined,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -132,6 +137,7 @@ export default function ClientsPage() {
         description: data.description || f.description,
         avatarDesc: data.avatarDesc || f.avatarDesc,
       }))
+      toast('Campos auto-rellenados', 'success')
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Error al analizar', 'error')
     } finally {
@@ -210,57 +216,11 @@ export default function ClientsPage() {
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-500 block mb-1">Website</label>
-              <div className="flex gap-2">
-                <input
-                  value={form.websiteUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, websiteUrl: e.target.value }))}
-                  placeholder="https://..."
-                  className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                />
-                <button
-                  type="button"
-                  onClick={handleAnalyze}
-                  disabled={analyzing || !form.websiteUrl.trim()}
-                  className="h-10 px-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors whitespace-nowrap flex items-center gap-1.5"
-                  title="Analizar web con IA para auto-rellenar nicho, descripción y avatar"
-                >
-                  {analyzing ? (
-                    <>
-                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Analizando...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      Auto-rellenar
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-xs font-semibold text-slate-500 block mb-1">Descripción del negocio</label>
-              <textarea
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Qué hace este cliente, qué vende..."
-                rows={2}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-y"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-xs font-semibold text-slate-500 block mb-1">Avatar / Cliente Ideal</label>
-              <textarea
-                value={form.avatarDesc}
-                onChange={(e) => setForm((f) => ({ ...f, avatarDesc: e.target.value }))}
-                placeholder="A quién se dirige, demografía, dolores..."
-                rows={2}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-y"
+              <input
+                value={form.websiteUrl}
+                onChange={(e) => setForm((f) => ({ ...f, websiteUrl: e.target.value }))}
+                placeholder="https://..."
+                className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
               />
             </div>
             <div>
@@ -270,6 +230,56 @@ export default function ClientsPage() {
                 onChange={(e) => setForm((f) => ({ ...f, driveFolder: e.target.value }))}
                 placeholder="URL de la carpeta"
                 className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+              />
+            </div>
+            {/* Auto-rellenar button */}
+            <div className="sm:col-span-2">
+              <button
+                type="button"
+                onClick={handleAnalyze}
+                disabled={analyzing || !canAnalyze}
+                className="w-full h-10 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                title="Analizar web y/o Drive con IA para auto-rellenar nicho, descripcion y avatar"
+              >
+                {analyzing ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Analizando con IA...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Auto-rellenar con IA (desde web y/o Drive)
+                  </>
+                )}
+              </button>
+              <p className="text-xs text-slate-400 mt-1 text-center">
+                Rellena automaticamente nicho, descripcion y avatar analizando la web y la info de Drive
+              </p>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold text-slate-500 block mb-1">Descripcion del negocio</label>
+              <textarea
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Que hace este cliente, que vende..."
+                rows={2}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-y"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold text-slate-500 block mb-1">Avatar / Cliente Ideal</label>
+              <textarea
+                value={form.avatarDesc}
+                onChange={(e) => setForm((f) => ({ ...f, avatarDesc: e.target.value }))}
+                placeholder="A quien se dirige, demografia, dolores..."
+                rows={2}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-y"
               />
             </div>
             <div>

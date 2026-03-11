@@ -184,9 +184,21 @@ export default function QuickAddModal({ onClose }: QuickAddModalProps) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                  Países
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                    Paises
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allCodes = COUNTRY_OPTIONS.map((c) => c.code)
+                      setCountries((prev) => prev.length === allCodes.length ? ['ES', 'MX', 'AR', 'CO'] : [...allCodes])
+                    }}
+                    className="text-[10px] font-semibold text-violet-600 hover:text-violet-800 transition-colors"
+                  >
+                    {countries.length === COUNTRY_OPTIONS.length ? 'Resetear seleccion' : 'Seleccionar todos'}
+                  </button>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {COUNTRY_OPTIONS.map(({ code, label }) => (
                     <button
