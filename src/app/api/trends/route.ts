@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const competitorId = searchParams.get('competitorId') || undefined
     const clientId = searchParams.get('clientId') || undefined
     const viral = searchParams.get('viral')
-    const daysBack = Math.max(1, parseInt(searchParams.get('daysBack') || '30') || 30)
+    const daysBack = Math.max(1, Math.min(365, parseInt(searchParams.get('daysBack') || '30') || 30))
     const limit = Math.max(1, Math.min(200, parseInt(searchParams.get('limit') || '50') || 50))
 
     if (view === 'virals') {

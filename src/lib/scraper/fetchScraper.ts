@@ -19,10 +19,9 @@ export async function scrapePageWithFetch(url: string): Promise<ScrapedPageConte
   let lastError = ''
 
   for (const ua of USER_AGENTS) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 20000)
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 20000)
-
       const response = await fetch(url, {
         headers: {
           'User-Agent': ua,
@@ -69,6 +68,7 @@ export async function scrapePageWithFetch(url: string): Promise<ScrapedPageConte
         httpStatus,
       }
     } catch (err) {
+      clearTimeout(timeout)
       lastError = err instanceof Error ? err.message : String(err)
       continue
     }

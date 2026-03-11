@@ -138,8 +138,14 @@ export function extractLinksFromNextData(html: string): string[] {
 }
 
 /** Recursively find URL strings in a nested object/array */
-function extractUrlsFromObject(obj: unknown, links: string[], depth = 0): void {
-  if (depth > 8) return // prevent infinite recursion
+function extractUrlsFromObject(
+  obj: unknown,
+  links: string[],
+  depth = 0,
+  visited = new Set<unknown>(),
+): void {
+  if (depth > 8) return // prevent deep recursion
+  if (links.length > 200) return // prevent unbounded growth
   if (!obj || typeof obj !== 'object') {
     if (typeof obj === 'string' && obj.startsWith('http') && !obj.includes(' ')) {
       try {
@@ -150,9 +156,13 @@ function extractUrlsFromObject(obj: unknown, links: string[], depth = 0): void {
     return
   }
 
+  // Prevent infinite loops on circular references
+  if (visited.has(obj)) return
+  visited.add(obj)
+
   if (Array.isArray(obj)) {
     for (const item of obj) {
-      extractUrlsFromObject(item, links, depth + 1)
+      extractUrlsFromObject(item, links, depth + 1, visited)
     }
     return
   }
@@ -162,11 +172,11 @@ function extractUrlsFromObject(obj: unknown, links: string[], depth = 0): void {
     const keyLower = key.toLowerCase()
     if (keyLower.includes('url') || keyLower === 'href' || keyLower === 'link' ||
         keyLower === 'src' || keyLower === 'links' || keyLower === 'destination') {
-      extractUrlsFromObject(value, links, depth + 1)
+      extractUrlsFromObject(value, links, depth + 1, visited)
     }
     // Also recurse into arrays and nested objects (props, pageProps, etc.)
     if (typeof value === 'object' && value !== null) {
-      extractUrlsFromObject(value, links, depth + 1)
+      extractUrlsFromObject(value, links, depth + 1, visited)
     }
   }
 }

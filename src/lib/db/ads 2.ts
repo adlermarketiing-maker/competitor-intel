@@ -93,38 +93,19 @@ export async function markEliminatedAds(competitorId: string, scrapedMetaAdIds: 
 
   const retiredWinners: Array<{ metaAdId: string; daysActive: number; headline: string | null }> = []
 
-  // Group by final status to use updateMany instead of N individual updates
-  const normalIds: string[] = []
-  const posibleIds: string[] = []
-  const winnerIds: string[] = []
-
-  for (const ad of missingAds) {
+  const updates = missingAds.map((ad) => {
     const daysActive = computeDaysActive(ad.startDate, ad.stopDate ?? now)
-    const newStatus = computeAdStatus(daysActive)
     if (ad.adStatus === 'winner') {
       retiredWinners.push({ metaAdId: ad.metaAdId, daysActive, headline: ad.headline })
     }
-    if (newStatus === 'winner') winnerIds.push(ad.id)
-    else if (newStatus === 'posible_winner') posibleIds.push(ad.id)
-    else normalIds.push(ad.id)
-  }
+    return db.ad.update({
+      where: { id: ad.id },
+      data: { isActive: false, daysActive, adStatus: computeAdStatus(daysActive) },
+    })
+  })
 
-  if (missingAds.length > 0) {
-    const ops = [
-      ...(normalIds.length > 0 ? [db.ad.updateMany({
-        where: { id: { in: normalIds } },
-        data: { isActive: false, adStatus: 'normal' },
-      })] : []),
-      ...(posibleIds.length > 0 ? [db.ad.updateMany({
-        where: { id: { in: posibleIds } },
-        data: { isActive: false, adStatus: 'posible_winner' },
-      })] : []),
-      ...(winnerIds.length > 0 ? [db.ad.updateMany({
-        where: { id: { in: winnerIds } },
-        data: { isActive: false, adStatus: 'winner' },
-      })] : []),
-    ]
-    await db.$transaction(ops)
+  if (updates.length > 0) {
+    await db.$transaction(updates)
   }
 
   return { eliminatedCount: missingAds.length, retiredWinners }

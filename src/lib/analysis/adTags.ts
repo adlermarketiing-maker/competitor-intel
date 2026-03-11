@@ -1,5 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk'
 
+// Singleton — reuse HTTP connection across calls instead of creating per-request
+let _client: Anthropic | null = null
+function getClient(): Anthropic {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
+  if (!_client) _client = new Anthropic({ apiKey })
+  return _client
+}
+
 export interface AdTagsResult {
   hookType: string
   marketingAngle: string
@@ -32,10 +41,7 @@ export async function analyzeAdTags(input: {
   hasImages: boolean
   imageCount: number
 }): Promise<AdTagsResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
-
-  const client = new Anthropic({ apiKey })
+  const client = getClient()
 
   const copyText = input.copyBodies.join('\n\n') || ''
   const fullText = [

@@ -9,6 +9,9 @@ let puppeteerModule: any = null
 let browserInstance: any = null
 let puppeteerAvailable: boolean | null = null // Cache: null=unknown, true/false=tested
 
+// Prevents concurrent browser launch races (only one launch at a time)
+let launchPromise: Promise<unknown> | null = null
+
 async function loadPuppeteer() {
   if (!puppeteerModule) {
     try {
@@ -27,23 +30,32 @@ async function getBrowser() {
   if (browserInstance && !browserInstance.connected) {
     try { await browserInstance.close() } catch { /* already dead */ }
     browserInstance = null
+    launchPromise = null
   }
   if (!browserInstance) {
-    const puppeteer = await loadPuppeteer()
-    browserInstance = await puppeteer.launch({
-      headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-      ],
-    })
+    // If a launch is already in progress, wait for it instead of starting another
+    if (!launchPromise) {
+      launchPromise = (async () => {
+        const puppeteer = await loadPuppeteer()
+        browserInstance = await puppeteer.launch({
+          headless: true,
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu',
+          ],
+        })
+        launchPromise = null
+        return browserInstance
+      })()
+    }
+    await launchPromise
   }
   return browserInstance
 }

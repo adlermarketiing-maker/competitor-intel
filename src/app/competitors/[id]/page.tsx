@@ -167,9 +167,9 @@ export default function CompetitorProfilePage() {
     if (adSort === 'oldest') return new Date(a.firstSeenAt).getTime() - new Date(b.firstSeenAt).getTime()
     return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
   })
-  // Detect stale RUNNING jobs (stuck > 10 min without completing)
+  // Detect stale RUNNING jobs (stuck > 20 min — lockDuration is 5 min, normal jobs take up to 15 min)
   const isStaleJob = latestJob?.status === 'RUNNING' && latestJob.startedAt &&
-    (Date.now() - new Date(latestJob.startedAt).getTime() > 10 * 60 * 1000)
+    (Date.now() - new Date(latestJob.startedAt).getTime() > 20 * 60 * 1000)
   const isJobRunning = !isStaleJob && (latestJob?.status === 'RUNNING' || (scraping && !currentJobId))
 
   return (

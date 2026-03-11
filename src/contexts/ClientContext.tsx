@@ -39,7 +39,9 @@ export function ClientProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    let isMounted = true
     refreshClients().then((fetched) => {
+      if (!isMounted) return
       // Restore from localStorage
       const stored = localStorage.getItem('selectedClientId')
       if (stored && fetched.some((c: Client) => c.id === stored)) {
@@ -49,6 +51,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
       }
       setLoading(false)
     })
+    return () => { isMounted = false }
   }, [refreshClients])
 
   const selectClient = (id: string) => {

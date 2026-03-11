@@ -36,8 +36,15 @@ export async function POST(
     }
 
     const body = await req.json().catch(() => ({}))
-    const jobType: JobType = body.jobType || 'FULL_SCRAPE'
-    const countries: string[] = body.countries || []
+    const validJobTypes: JobType[] = ['FULL_SCRAPE', 'ADS_ONLY', 'LANDING_PAGES']
+    const rawJobType = body.jobType || 'FULL_SCRAPE'
+    if (!validJobTypes.includes(rawJobType)) {
+      return NextResponse.json({ error: `Invalid jobType. Must be one of: ${validJobTypes.join(', ')}` }, { status: 400 })
+    }
+    const jobType: JobType = rawJobType
+    const countries: string[] = Array.isArray(body.countries)
+      ? body.countries.filter((c: unknown) => typeof c === 'string').slice(0, 20)
+      : []
 
     const job = await createScrapeJob(id, jobType)
 
