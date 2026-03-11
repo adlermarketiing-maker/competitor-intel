@@ -1,17 +1,35 @@
-import puppeteer, { Browser } from 'puppeteer'
 import { extractContent, extractLinksFromNextData } from './extractor'
 import { scrapePageWithFetch } from './fetchScraper'
 import type { ScrapedPageContent } from '@/types/scrape'
 
-let browserInstance: Browser | null = null
+// Dynamic import — puppeteer is loaded lazily to avoid crashing the worker on import
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let puppeteerModule: any = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let browserInstance: any = null
 let puppeteerAvailable: boolean | null = null // Cache: null=unknown, true/false=tested
 
-async function getBrowser(): Promise<Browser> {
+async function loadPuppeteer() {
+  if (!puppeteerModule) {
+    try {
+      puppeteerModule = await import('puppeteer')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[Scraper] Failed to import puppeteer: ${msg}`)
+      puppeteerAvailable = false
+      throw err
+    }
+  }
+  return puppeteerModule.default || puppeteerModule
+}
+
+async function getBrowser() {
   if (browserInstance && !browserInstance.connected) {
     try { await browserInstance.close() } catch { /* already dead */ }
     browserInstance = null
   }
   if (!browserInstance) {
+    const puppeteer = await loadPuppeteer()
     browserInstance = await puppeteer.launch({
       headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
@@ -131,11 +149,12 @@ export async function scrapePage(
     // Puppeteer launch/runtime failure (no Chrome, crash, etc.)
     const errMsg = err instanceof Error ? err.message : String(err)
 
-    // If this was a launch failure, cache it so we don't retry for every page
+    // If this was a launch/import failure, cache it so we don't retry for every page
     if (errMsg.includes('Could not find') || errMsg.includes('ENOENT') ||
         errMsg.includes('spawn') || errMsg.includes('Failed to launch') ||
         errMsg.includes('Chromium') || errMsg.includes('chrome') ||
-        errMsg.includes('executablePath')) {
+        errMsg.includes('executablePath') || errMsg.includes('Cannot find module') ||
+        errMsg.includes('Failed to import') || errMsg.includes('MODULE_NOT_FOUND')) {
       console.warn(`[Scraper] Puppeteer unavailable (${errMsg.slice(0, 100)}), switching to fetch mode`)
       puppeteerAvailable = false
     } else {
