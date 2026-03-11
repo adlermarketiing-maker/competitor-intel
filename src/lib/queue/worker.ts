@@ -9,6 +9,7 @@ import { upsertLandingPage } from '@/lib/db/landings'
 import { updateScrapeJob } from '@/lib/db/jobs'
 import { getCompetitor, updateCompetitor } from '@/lib/db/competitors'
 import { scrapePage, isPuppeteerAvailable } from '@/lib/scraper/puppeteer'
+import { discoverUrlsFromSitemap, probeCommonPaths } from '@/lib/scraper/sitemap'
 import { isSameDomain, isSocialMediaUrl, isLinkInBioService } from '@/lib/utils/urls'
 import type { ScrapeJobData, JobStatus } from '@/types/scrape'
 
@@ -391,6 +392,47 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         await emit(jobDbId, 'progress', `Error rastreando web: ${msg}`)
+      }
+
+      // Source B2: Sitemap.xml discovery (works even when homepage returns 403)
+      try {
+        await emit(jobDbId, 'progress', `Buscando sitemap.xml en ${latestComp.websiteUrl}...`)
+        const sitemapUrls = await discoverUrlsFromSitemap(latestComp.websiteUrl, {
+          maxUrls: 150,
+          onProgress: async (msg) => await emit(jobDbId, 'progress', msg),
+        })
+        let sitemapNew = 0
+        for (const sUrl of sitemapUrls) {
+          try {
+            if (isSameDomain(sUrl, latestComp.websiteUrl) && !isSocialMediaUrl(sUrl) && !isJunkUrl(sUrl)) {
+              const before = discoveredUrls.size
+              addUrl(sUrl, 'sitemap')
+              if (discoveredUrls.size > before) sitemapNew++
+            }
+          } catch { /* ignore */ }
+        }
+        if (sitemapNew > 0) {
+          await emit(jobDbId, 'progress', `${sitemapNew} URLs nuevas del sitemap`)
+        } else if (sitemapUrls.length === 0) {
+          await emit(jobDbId, 'progress', 'No se encontró sitemap.xml')
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        await emit(jobDbId, 'progress', `Error leyendo sitemap: ${msg}`)
+      }
+
+      // Source B3: Probe common paths (fallback if sitemap + crawl found very few URLs)
+      if (discoveredUrls.size < 5) {
+        try {
+          await emit(jobDbId, 'progress', 'Pocas URLs encontradas, probando rutas comunes...')
+          const commonUrls = await probeCommonPaths(latestComp.websiteUrl)
+          for (const cUrl of commonUrls) {
+            addUrl(cUrl, 'common-path')
+          }
+          if (commonUrls.length > 0) {
+            await emit(jobDbId, 'progress', `${commonUrls.length} rutas comunes accesibles`)
+          }
+        } catch { /* ignore */ }
       }
     }
 
