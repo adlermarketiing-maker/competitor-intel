@@ -85,10 +85,12 @@ export async function deleteCompetitor(id: string) {
 }
 
 /**
- * Clears all auto-detected fields (fbPageId, facebookUrl, instagramUrl, adLibraryUrl)
- * and deletes all scraped ads for this competitor, so the next scrape starts fresh.
+ * Full reset: clears all scraped data (ads, landings, jobs, funnel analysis)
+ * and auto-detected fields, so the next scrape starts completely fresh.
  */
 export async function resetCompetitorData(id: string) {
+  await db.landingPage.deleteMany({ where: { competitorId: id } })
+  await db.scrapeJob.deleteMany({ where: { competitorId: id } })
   await db.ad.deleteMany({ where: { competitorId: id } })
   return db.competitor.update({
     where: { id },
@@ -98,6 +100,18 @@ export async function resetCompetitorData(id: string) {
       instagramUrl: null,
       adLibraryUrl: null,
       lastScrapedAt: null,
+      funnelAnalyzedAt: null,
+      avatar: null,
+      promesa: null,
+      promesaOferta: null,
+      oferta: null,
+      bonos: null,
+      garantia: null,
+      pruebasAutoridad: null,
+      precio: null,
+      embudoStructure: null,
+      funnelNotes: null,
+      funnelUrl: null,
     },
   })
 }

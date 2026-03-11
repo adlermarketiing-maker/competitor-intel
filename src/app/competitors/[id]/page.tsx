@@ -89,7 +89,10 @@ export default function CompetitorProfilePage() {
         body: JSON.stringify({ action: 'reset' }),
       })
       if (!res.ok) throw new Error('Error al resetear')
+      setScraping(false)
+      setCurrentJobId(null)
       await loadData()
+      toast('Datos reseteados', 'success')
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Error al resetear', 'error')
     } finally {
@@ -164,7 +167,10 @@ export default function CompetitorProfilePage() {
     if (adSort === 'oldest') return new Date(a.firstSeenAt).getTime() - new Date(b.firstSeenAt).getTime()
     return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
   })
-  const isJobRunning = latestJob?.status === 'RUNNING' || (scraping && !currentJobId)
+  // Detect stale RUNNING jobs (stuck > 10 min without completing)
+  const isStaleJob = latestJob?.status === 'RUNNING' && latestJob.startedAt &&
+    (Date.now() - new Date(latestJob.startedAt).getTime() > 10 * 60 * 1000)
+  const isJobRunning = !isStaleJob && (latestJob?.status === 'RUNNING' || (scraping && !currentJobId))
 
   return (
     <div>
@@ -253,7 +259,7 @@ export default function CompetitorProfilePage() {
             </button>
             <button
               onClick={handleReset}
-              disabled={resetting || scraping || isJobRunning}
+              disabled={resetting}
               title="Borrar datos auto-detectados y anuncios scrapeados para empezar limpio"
               className="text-sm font-medium px-3 py-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors border border-transparent hover:border-amber-100"
             >
