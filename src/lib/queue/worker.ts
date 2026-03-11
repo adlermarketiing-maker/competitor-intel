@@ -533,65 +533,28 @@ async function processScrapeJob(job: Job<ScrapeJobData>): Promise<void> {
       }
 
       // ── Save landing pages to database ──────────────────────────────
+      // Save individually (not in a transaction) to avoid holding a DB connection
+      // for minutes, which causes MaxClientsInSessionMode on Supabase pooler
       if (scrapedLandings.length > 0) {
         await emit(jobDbId, 'progress', `Guardando ${scrapedLandings.length} landing pages...`)
+
+        // Clear old landings first
         try {
-          await db.$transaction(async (tx) => {
-            await tx.landingPage.deleteMany({ where: { competitorId } })
-            for (const { adId, content } of scrapedLandings) {
-              await tx.landingPage.upsert({
-                where: { url: content.url },
-                update: {
-                  competitorId,
-                  adId,
-                  originalUrl: content.originalUrl,
-                  title: content.title,
-                  h1Texts: content.h1Texts,
-                  h2Texts: content.h2Texts,
-                  ctaTexts: content.ctaTexts,
-                  prices: content.prices,
-                  offerName: content.offerName,
-                  bodyText: content.bodyText,
-                  screenshotPath: content.screenshotPath,
-                  outboundLinks: content.outboundLinks,
-                  httpStatus: content.httpStatus,
-                  scrapeError: content.error ?? null,
-                },
-                create: {
-                  competitorId,
-                  adId,
-                  url: content.url,
-                  originalUrl: content.originalUrl,
-                  title: content.title,
-                  h1Texts: content.h1Texts,
-                  h2Texts: content.h2Texts,
-                  ctaTexts: content.ctaTexts,
-                  prices: content.prices,
-                  offerName: content.offerName,
-                  bodyText: content.bodyText,
-                  screenshotPath: content.screenshotPath,
-                  outboundLinks: content.outboundLinks,
-                  httpStatus: content.httpStatus,
-                  scrapeError: content.error ?? null,
-                },
-              })
-            }
-          }, { timeout: 60000 }) // 60s timeout for large batches
+          await db.landingPage.deleteMany({ where: { competitorId } })
         } catch (err) {
-          console.error(`[Worker] Transaction failed, trying individual saves:`, err instanceof Error ? err.message : err)
-          await emit(jobDbId, 'progress', 'Error en guardado masivo, guardando individualmente...')
-          let savedCount = 0
-          for (const { adId, content } of scrapedLandings) {
-            try {
-              await upsertLandingPage(competitorId, adId, content)
-              savedCount++
-            } catch (innerErr) {
-              console.error(`[Worker] Error saving landing ${content.url}:`, innerErr instanceof Error ? innerErr.message : innerErr)
-            }
-          }
-          await emit(jobDbId, 'progress', `${savedCount}/${scrapedLandings.length} landings guardadas (fallback)`)
+          console.error(`[Worker] Error clearing old landings:`, err instanceof Error ? err.message : err)
         }
-        await emit(jobDbId, 'progress', `${scrapedLandings.length} landings guardadas`)
+
+        let savedCount = 0
+        for (const { adId, content } of scrapedLandings) {
+          try {
+            await upsertLandingPage(competitorId, adId, content)
+            savedCount++
+          } catch (err) {
+            console.error(`[Worker] Error saving landing ${content.url}:`, err instanceof Error ? err.message : err)
+          }
+        }
+        await emit(jobDbId, 'progress', `${savedCount}/${scrapedLandings.length} landings guardadas`)
       }
     }
   }
@@ -677,6 +640,9 @@ export function startWorker() {
   }, {
     connection: getRedisConnectionOpts(),
     concurrency: 1,
+    lockDuration: 300000,     // 5 min — scrape jobs are long-running
+    stalledInterval: 30000,   // check for stalled jobs every 30s
+    maxStalledCount: 2,       // retry stalled jobs up to 2 times before failing
   })
 
   worker.on('completed', (job) => {
@@ -697,10 +663,42 @@ export function startWorker() {
       }).catch((e) => console.error('[Worker] Failed to publish failure event:', e))
     }
   })
+  worker.on('stalled', (jobId) => {
+    console.warn(`[Worker] Job ${jobId} stalled — will be retried`)
+  })
   worker.on('error', (err) => {
     console.error('[Worker] Worker error:', err)
   })
 
+  // Clean up stalled/stuck jobs from previous crashes on startup
+  cleanupStalledJobs().catch((e) => console.error('[Worker] Cleanup error:', e))
+
   console.log('[Worker] Scrape competitor worker started')
   return worker
+}
+
+/** Mark DB jobs stuck in RUNNING/PENDING (from previous crashes) as FAILED */
+async function cleanupStalledJobs() {
+  try {
+    const { db: prisma } = await import('@/lib/db/client')
+    const staleThreshold = new Date(Date.now() - 15 * 60 * 1000) // 15 min ago
+
+    const stuckJobs = await prisma.scrapeJob.findMany({
+      where: {
+        status: { in: ['RUNNING', 'PENDING'] },
+        createdAt: { lt: staleThreshold },
+      },
+      select: { id: true, status: true },
+    })
+
+    if (stuckJobs.length > 0) {
+      console.log(`[Worker] Found ${stuckJobs.length} stuck jobs from previous crashes, marking as FAILED`)
+      await prisma.scrapeJob.updateMany({
+        where: { id: { in: stuckJobs.map((j) => j.id) } },
+        data: { status: 'FAILED', errorMessage: 'Marked as failed: worker restarted', completedAt: new Date() },
+      })
+    }
+  } catch (err) {
+    console.error('[Worker] Failed to clean up stalled jobs:', err instanceof Error ? err.message : err)
+  }
 }

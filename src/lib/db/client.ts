@@ -5,14 +5,20 @@ declare global {
   var prismaGlobal: PrismaClient | undefined
 }
 
-// Append connection_limit to DATABASE_URL if not already set
-// Railway free tier has limited connections shared across app + worker
+// Optimize DATABASE_URL for Supabase pooler compatibility
+// - pgbouncer=true: required for Supabase's connection pooler (avoids prepared statement errors)
+// - connection_limit=2: keep low to avoid MaxClientsInSessionMode on Supabase free tier
 function getDatasourceUrl(): string | undefined {
   const url = process.env.DATABASE_URL
   if (!url) return undefined
-  if (url.includes('connection_limit')) return url
+
+  const params: string[] = []
+  if (!url.includes('connection_limit')) params.push('connection_limit=2')
+  if (!url.includes('pgbouncer') && url.includes('pooler.supabase.com')) params.push('pgbouncer=true')
+
+  if (params.length === 0) return url
   const separator = url.includes('?') ? '&' : '?'
-  return `${url}${separator}connection_limit=3`
+  return `${url}${separator}${params.join('&')}`
 }
 
 export const db =
