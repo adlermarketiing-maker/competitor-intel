@@ -186,7 +186,7 @@ export default function QuickAddModal({ onClose }: QuickAddModalProps) {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                    Paises
+                    Países
                   </label>
                   <button
                     type="button"
@@ -196,7 +196,7 @@ export default function QuickAddModal({ onClose }: QuickAddModalProps) {
                     }}
                     className="text-[10px] font-semibold text-violet-600 hover:text-violet-800 transition-colors"
                   >
-                    {countries.length === COUNTRY_OPTIONS.length ? 'Resetear seleccion' : 'Seleccionar todos'}
+                    {countries.length === COUNTRY_OPTIONS.length ? 'Resetear selección' : 'Seleccionar todos'}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
