@@ -104,9 +104,11 @@ export default function CompetitorProfilePage() {
     if (!confirm(`¿Eliminar "${data?.competitor.name}"? Esta acción no se puede deshacer.`)) return
     setDeleting(true)
     try {
-      await fetch(`/api/competitors/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/competitors/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`Error ${res.status}`)
       router.push('/competitors')
-    } catch {
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Error al eliminar', 'error')
       setDeleting(false)
     }
   }

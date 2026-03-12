@@ -224,15 +224,15 @@ export default function MarketPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
           </div>
-          <p className="text-sm font-semibold text-slate-700 mb-1">Sin analisis de mercado</p>
+          <p className="text-sm font-semibold text-slate-700 mb-1">Sin análisis de mercado</p>
           <p className="text-xs text-slate-400 mb-4">
-            Ve a la seccion de Resenas para extraer reviews de plataformas y generar el analisis con IA
+            Ve a la sección de Reseñas para extraer reviews de plataformas y generar el análisis con IA
           </p>
           <a
             href="/reviews"
             className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
           >
-            Ir a Resenas
+            Ir a Reseñas
           </a>
         </div>
       ) : (
@@ -251,10 +251,10 @@ export default function MarketPage() {
                   }`}
                 >
                   <p className="text-sm font-semibold text-slate-800 truncate">
-                    {analysis.competitor?.name || analysis.searchKeywords || 'Analisis'}
+                    {analysis.competitor?.name || analysis.searchKeywords || 'Análisis'}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-slate-400">{analysis.totalReviews} resenas</span>
+                    <span className="text-xs text-slate-400">{analysis.totalReviews} reseñas</span>
                     <span className="text-xs text-slate-300">·</span>
                     <span className="text-xs text-slate-400">
                       {new Date(analysis.analyzedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
@@ -281,10 +281,10 @@ export default function MarketPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">
-                      {a.competitor?.name || a.searchKeywords || 'Analisis de Mercado'}
+                      {a.competitor?.name || a.searchKeywords || 'Análisis de Mercado'}
                     </h2>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-slate-400">{a.totalReviews} resenas analizadas</span>
+                      <span className="text-xs text-slate-400">{a.totalReviews} reseñas analizadas</span>
                       <span className="text-xs text-slate-400">{a.platforms.join(', ')}</span>
                       <span className="text-xs text-slate-400">
                         {new Date(a.analyzedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -298,7 +298,7 @@ export default function MarketPage() {
                         type="text"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Buscar en el analisis..."
+                        placeholder="Buscar en el análisis..."
                         className="h-9 pl-8 pr-3 w-52 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
                       />
                       <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -441,7 +441,7 @@ export default function MarketPage() {
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-sm text-slate-400">Selecciona un analisis de la lista</p>
+              <p className="text-sm text-slate-400">Selecciona un análisis de la lista</p>
             </div>
           )}
         </div>

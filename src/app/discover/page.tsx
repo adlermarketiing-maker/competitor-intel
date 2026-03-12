@@ -92,7 +92,7 @@ export default function DiscoverPage() {
     setLoading(true)
     setError(null)
     setResult(null)
-    setProgress({ message: 'Iniciando busqueda...', adsScanned: 0, advertisersFound: 0 })
+    setProgress({ message: 'Iniciando búsqueda...', adsScanned: 0, advertisersFound: 0 })
 
     let receivedDone = false
 
@@ -179,7 +179,7 @@ export default function DiscoverPage() {
           })
           setProgress(null)
         } else {
-          setError('La conexion se interrumpio. Si la busqueda se completo, recarga la pagina para ver los resultados.')
+          setError('La conexión se interrumpió. Si la búsqueda se completó, recarga la página para ver los resultados.')
           setProgress(null)
         }
       }
@@ -203,7 +203,8 @@ export default function DiscoverPage() {
     if (deletingId) return
     setDeletingId(id)
     try {
-      await fetch(`/api/discover/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/discover/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`Error ${res.status}`)
       setHistory((prev) => prev.filter((h) => h.id !== id))
       if (result?.searchId === id) setResult(null)
     } catch {
@@ -260,7 +261,7 @@ export default function DiscoverPage() {
         <div className="mb-5">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
-              Paises a buscar
+              Países a buscar
             </label>
             <button
               type="button"
@@ -374,7 +375,7 @@ export default function DiscoverPage() {
               Resultados para <span className="text-violet-700">&quot;{result.keywords}&quot;</span>
               {result.total > 0 && (
                 <span className="text-slate-400 font-normal ml-1">
-                  — {result.total} anunciantes relevantes (formacion/mentoria/servicios)
+                  — {result.total} anunciantes relevantes (formación/mentoría/servicios)
                 </span>
               )}
             </h2>
@@ -387,7 +388,7 @@ export default function DiscoverPage() {
       {!loadingHistory && historyWithResults.length > 0 && (
         <div className="mb-6">
           <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-            Busquedas anteriores
+            Búsquedas anteriores
           </h2>
           <div className="space-y-2">
             {historyWithResults.map((item) => (
@@ -416,7 +417,7 @@ export default function DiscoverPage() {
                       onClick={(e) => handleDelete(item.id, e)}
                       disabled={deletingId === item.id}
                       className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-                      title="Eliminar busqueda"
+                      title="Eliminar búsqueda"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -437,7 +438,7 @@ export default function DiscoverPage() {
       {!loadingHistory && historyEmpty.length > 0 && (
         <details className="mb-6">
           <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-500 transition-colors">
-            {historyEmpty.length} busqueda{historyEmpty.length !== 1 ? 's' : ''} sin resultados
+            {historyEmpty.length} búsqueda{historyEmpty.length !== 1 ? 's' : ''} sin resultados
           </summary>
           <div className="space-y-1 mt-2">
             {historyEmpty.map((item) => (
@@ -474,7 +475,7 @@ export default function DiscoverPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
-          <p className="text-sm font-semibold text-slate-700 mb-1">Empieza tu primera busqueda</p>
+          <p className="text-sm font-semibold text-slate-700 mb-1">Empieza tu primera búsqueda</p>
           <p className="text-xs text-slate-400">
             Escribe keywords de tu nicho y escanearemos miles de anuncios en Meta Ad Library para descubrir todos los competidores
           </p>
