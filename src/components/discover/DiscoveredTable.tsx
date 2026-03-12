@@ -60,7 +60,7 @@ export default function DiscoveredTable({ advertisers }: DiscoveredTableProps) {
       setAddedIds((prev) => new Set([...prev, advertiser.id]))
       router.push(`/competitors/${json.competitorId}?jobId=${json.jobId}`)
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Error al anadir competidor', 'error')
+      toast(err instanceof Error ? err.message : 'Error al añadir competidor', 'error')
     } finally {
       setAddingIds((prev) => {
         const next = new Set(prev)
