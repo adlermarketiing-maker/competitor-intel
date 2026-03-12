@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useClient } from '@/contexts/ClientContext'
-import CompetitorTable from '@/components/competitors/CompetitorTable'
+import CompetitorTable, { type CompetitorRow } from '@/components/competitors/CompetitorTable'
 import AddCompetitorButton from '@/components/shared/AddCompetitorButton'
 import { SkeletonTable } from '@/components/shared/Skeleton'
 
 export default function CompetitorsPage() {
   const { selectedClientId, loading: clientLoading } = useClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [competitors, setCompetitors] = useState<any[]>([])
+  const [competitors, setCompetitors] = useState<CompetitorRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -52,9 +51,9 @@ export default function CompetitorsPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </div>
-          <p className="text-base font-semibold text-slate-700 mb-1">Sin competidores todavia</p>
+          <p className="text-base font-semibold text-slate-700 mb-1">Sin competidores todavía</p>
           <p className="text-sm text-slate-400 max-w-md mx-auto mb-5">
-            Anade tu primer competidor para empezar a monitorear sus anuncios, landings y estrategias.
+            Añade tu primer competidor para empezar a monitorear sus anuncios, landings y estrategias.
           </p>
           <AddCompetitorButton />
         </div>

@@ -323,7 +323,7 @@ export default function TrendsPage() {
 
   useEffect(() => {
     const cParam = selectedClientId ? `?clientId=${selectedClientId}` : ''
-    Promise.all([
+    Promise.allSettled([
       fetch(`/api/competitors${cParam}`).then((r) => r.json()).then((d) => { if (Array.isArray(d)) setCompetitors(d) }),
       fetchPosts(),
       fetchOpportunities(),

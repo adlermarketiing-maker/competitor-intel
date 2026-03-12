@@ -80,6 +80,7 @@ export default function AdsPage() {
   const [page, setPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [retryKey, setRetryKey] = useState(0)
 
   // Load competitor list for filter dropdown
   useEffect(() => {
@@ -112,7 +113,7 @@ export default function AdsPage() {
       .then((r) => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json() })
       .then((d) => { setData(d); setLoading(false) })
       .catch((err) => { setError(err.message); setLoading(false) })
-  }, [adStatus, isActiveFilter, page, competitorId, platform, sortBy, minDays, maxDays, hookType, marketingAngle, creativeFormat, awarenessLevel, minScore, selectedClientId])
+  }, [adStatus, isActiveFilter, page, competitorId, platform, sortBy, minDays, maxDays, hookType, marketingAngle, creativeFormat, awarenessLevel, minScore, selectedClientId, retryKey])
 
   const activeFilterCount = [
     competitorId, adStatus, isActiveFilter, platform, sortBy !== 'daysActive' ? sortBy : '',
@@ -284,7 +285,7 @@ export default function AdsPage() {
         <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
           <p className="text-red-700 font-medium mb-1">Error al cargar anuncios</p>
           <p className="text-red-500 text-sm">{error}</p>
-          <button onClick={() => setPage(p => p)} className="mt-3 text-sm text-red-600 underline">Reintentar</button>
+          <button onClick={() => setRetryKey(k => k + 1)} className="mt-3 text-sm text-red-600 underline">Reintentar</button>
         </div>
       ) : loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

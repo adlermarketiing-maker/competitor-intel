@@ -96,9 +96,8 @@ export default function WinnersPage() {
             </div>
             <p className="text-sm font-semibold text-slate-700 mb-1">Sin winners todavía</p>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Los anuncios que lleven más de 14 días activos se marcan como 🏆 Winner y los de 7-14 días como 🔥 Hot automáticamente.
-            Haz scraping regularmente para detectarlos antes que la competencia.
-              Haz scraping de tus competidores varias veces para empezar a detectarlos.
+              Los anuncios con más de 14 días activos se marcan como 🏆 Winner y los de 7-14 días como 🔥 Hot.
+              Haz scraping regularmente para detectarlos antes que la competencia.
             </p>
           </div>
         ) : (

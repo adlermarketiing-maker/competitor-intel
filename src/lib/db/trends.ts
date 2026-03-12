@@ -246,15 +246,15 @@ export async function calculateViralStatus(authorHandle: string, platform: strin
   // Use the max followers value across posts (all should be same profile)
   const avgFollowers = Math.max(...posts.map((p) => p.followers), 1)
 
-  for (const post of posts) {
+  const updates = posts.map((post) => {
     const totalEngagement = post.likes + post.comments
     const engagementRate = avgFollowers > 0 ? totalEngagement / avgFollowers : 0
     const viralScore = avgEngagement > 0 ? totalEngagement / avgEngagement : 0
     const isViral = viralScore > 3
-
-    await db.organicPost.update({
+    return db.organicPost.update({
       where: { id: post.id },
       data: { engagementRate, viralScore, isViral },
     })
-  }
+  })
+  await Promise.allSettled(updates)
 }

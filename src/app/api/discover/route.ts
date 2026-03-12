@@ -95,7 +95,12 @@ function sanitize(str: string | null | undefined): string | null {
 // ── API Routes ──────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  let body: { keywords?: string; countries?: string[]; clientId?: string }
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Request body inválido' }, { status: 400 })
+  }
   const { keywords, countries, clientId } = body
 
   if (!keywords?.trim()) {
@@ -107,9 +112,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'SEARCHAPI_KEY no configurada. Añádela en Railway.' }, { status: 400 })
   }
 
-  const settings = await getSettings()
-  const effectiveCountries: string[] = countries?.length > 0
-    ? countries
+  let settings: Awaited<ReturnType<typeof getSettings>>
+  try {
+    settings = await getSettings()
+  } catch {
+    settings = null
+  }
+  const effectiveCountries: string[] = (countries?.length ?? 0) > 0
+    ? countries!
     : (settings?.countries ?? ['ES', 'MX', 'AR', 'CO'])
 
   const encoder = new TextEncoder()
