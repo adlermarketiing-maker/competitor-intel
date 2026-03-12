@@ -120,11 +120,12 @@ export async function getDashboardStats(clientId?: string) {
   const compWhere = clientId ? { clientId } : {}
   const adWhere = clientId ? { competitor: { clientId } } : {}
   const lpWhere = clientId ? { competitor: { clientId } } : {}
-  const [competitors, totalAds, activeAds, landingPages] = await Promise.all([
+  const [competitors, totalAds, activeAds, landingPages, winners] = await Promise.all([
     db.competitor.count({ where: compWhere }),
     db.ad.count({ where: adWhere }),
     db.ad.count({ where: { isActive: true, ...adWhere } }),
     db.landingPage.count({ where: lpWhere }),
+    db.ad.count({ where: { adStatus: 'winner', ...adWhere } }),
   ])
-  return { competitors, totalAds, activeAds, landingPages }
+  return { competitors, totalAds, activeAds, landingPages, winners }
 }

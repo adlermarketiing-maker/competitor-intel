@@ -7,19 +7,20 @@ import StatCard from '@/components/shared/StatCard'
 import CompetitorTable from '@/components/competitors/CompetitorTable'
 import AddCompetitorButton from '@/components/shared/AddCompetitorButton'
 import { SkeletonStats, SkeletonTable } from '@/components/shared/Skeleton'
+import type { CompetitorRow } from '@/components/competitors/CompetitorTable'
 
 interface DashboardStats {
   competitors: number
   totalAds: number
   activeAds: number
   landingPages: number
+  winners: number
 }
 
 export default function DashboardPage() {
   const { selectedClientId, loading: clientLoading } = useClient()
-  const [stats, setStats] = useState<DashboardStats>({ competitors: 0, totalAds: 0, activeAds: 0, landingPages: 0 })
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [competitors, setCompetitors] = useState<any[]>([])
+  const [stats, setStats] = useState<DashboardStats>({ competitors: 0, totalAds: 0, activeAds: 0, landingPages: 0, winners: 0 })
+  const [competitors, setCompetitors] = useState<CompetitorRow[]>([])
   const [hasToken, setHasToken] = useState(true)
   const [loading, setLoading] = useState(true)
 
@@ -62,10 +63,10 @@ export default function DashboardPage() {
       {/* Stats */}
       {isLoading ? (
         <div className="mb-6">
-          <SkeletonStats count={4} />
+          <SkeletonStats count={5} />
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <StatCard
             label="Competidores"
             value={stats.competitors}
@@ -103,6 +104,16 @@ export default function DashboardPage() {
             icon={
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="🏆 Winners"
+            value={stats.winners}
+            color="violet"
+            icon={
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
               </svg>
             }
           />
@@ -153,7 +164,7 @@ export default function DashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </div>
-            <p className="text-sm font-semibold text-slate-700 mb-1">Empieza anadiendo un competidor</p>
+            <p className="text-sm font-semibold text-slate-700 mb-1">Empieza añadiendo un competidor</p>
             <p className="text-xs text-slate-400 mb-4">
               Monitorea anuncios, landings y estrategias de tu competencia
             </p>

@@ -11,7 +11,7 @@ type LatestJob = {
   createdAt: Date | string
 } | null
 
-type CompetitorRow = {
+export type CompetitorRow = {
   id: string
   name: string
   fbPageName: string | null

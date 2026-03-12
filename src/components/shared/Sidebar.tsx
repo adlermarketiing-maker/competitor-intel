@@ -75,7 +75,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
-    title: 'Investigacion',
+    title: 'Investigación',
     items: [
       {
         href: '/discover',
@@ -109,7 +109,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       },
       {
         href: '/reviews',
-        label: 'Resenas',
+        label: 'Reseñas',
         exact: false,
         icon: (
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -259,7 +259,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </span>
-          <span className="flex-1">Configuracion</span>
+          <span className="flex-1">Configuración</span>
         </Link>
       </div>
 
@@ -270,7 +270,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
           onClick={() => setShowModal(true)}
           className="w-full bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-xl py-2.5 transition-colors"
         >
-          + Anadir Competidor
+          + Añadir Competidor
         </button>
       </div>
     </aside>
