@@ -265,7 +265,7 @@ export default function AnalyticsPage() {
       {/* Winner formula highlight */}
       {summary.winners > 0 && winnerHook && winnerFormat && winnerAngle && winnerLength && (
         <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 mb-8">
-          <h3 className="text-sm font-bold text-amber-800 mb-2">Formula ganadora de los Winners</h3>
+          <h3 className="text-sm font-bold text-amber-800 mb-2">Fórmula ganadora de los Winners</h3>
           <div className="flex flex-wrap gap-2">
             <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-lg">
               Hook: {winnerHook.value.replace(/_/g, ' ')} ({winnerHook.winnerCount}W)
@@ -274,7 +274,7 @@ export default function AnalyticsPage() {
               Formato: {winnerFormat.value.replace(/_/g, ' ')} ({winnerFormat.winnerCount}W)
             </span>
             <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-lg">
-              Angulo: {winnerAngle.value.replace(/_/g, ' ')} ({winnerAngle.winnerCount}W)
+              Ángulo: {winnerAngle.value.replace(/_/g, ' ')} ({winnerAngle.winnerCount}W)
             </span>
             <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-lg">
               Copy: {winnerLength.value} ({winnerLength.winnerCount}W)
@@ -289,7 +289,7 @@ export default function AnalyticsPage() {
           <HorizontalBar items={distributions.hookType} color="bg-blue-400" />
         </Section>
 
-        <Section title="Angulos de Marketing">
+        <Section title="Ángulos de Marketing">
           <HorizontalBar items={distributions.marketingAngle} color="bg-purple-400" />
         </Section>
 
@@ -310,7 +310,7 @@ export default function AnalyticsPage() {
             {[
               { label: 'Con descuento', count: offers.withDiscount },
               { label: 'Con bonos', count: offers.withBonuses },
-              { label: 'Con garantia', count: offers.withGuarantee },
+              { label: 'Con garantía', count: offers.withGuarantee },
               { label: 'Con escasez', count: offers.withScarcity },
               { label: 'Precio visible', count: offers.withPrice },
             ].map(({ label, count }) => (
@@ -350,7 +350,7 @@ export default function AnalyticsPage() {
           </div>
         </Section>
 
-        <Section title="Evolucion Semanal">
+        <Section title="Evolución Semanal">
           {weeklyTrends.length === 0 ? (
             <p className="text-sm text-slate-400">Sin datos temporales</p>
           ) : (
@@ -373,7 +373,7 @@ export default function AnalyticsPage() {
 
       {/* Competitor comparison */}
       {competitorComparison.length > 0 && (
-        <Section title="Comparacion entre Competidores">
+        <Section title="Comparación entre Competidores">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -383,7 +383,7 @@ export default function AnalyticsPage() {
                   <th className="text-center py-2 text-xs font-semibold text-slate-400 uppercase">Winners</th>
                   <th className="text-center py-2 text-xs font-semibold text-slate-400 uppercase">Score</th>
                   <th className="text-left py-2 text-xs font-semibold text-slate-400 uppercase">Hook Top</th>
-                  <th className="text-left py-2 text-xs font-semibold text-slate-400 uppercase">Angulo Top</th>
+                  <th className="text-left py-2 text-xs font-semibold text-slate-400 uppercase">Ángulo Top</th>
                   <th className="text-left py-2 text-xs font-semibold text-slate-400 uppercase">Formato Top</th>
                 </tr>
               </thead>
@@ -442,7 +442,7 @@ export default function AnalyticsPage() {
           ) : (
             <div className="text-center py-6">
               <p className="text-sm text-slate-500 mb-3">
-                Genera un analisis con IA basado en todos los datos agregados
+                Genera un análisis con IA basado en todos los datos agregados
               </p>
               <button
                 onClick={loadInsights}
