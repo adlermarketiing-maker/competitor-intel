@@ -46,7 +46,7 @@ export default function WinnersPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Top Winners</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Anuncios con más de 14 días activos — los que mejor funcionan
+            Anuncios con más de 14 días activos 🏆 — los que mejor convierten
           </p>
         </div>
 
@@ -96,7 +96,8 @@ export default function WinnersPage() {
             </div>
             <p className="text-sm font-semibold text-slate-700 mb-1">Sin winners todavía</p>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Los anuncios que lleven más de 14 días activos se marcarán como winners automáticamente.
+              Los anuncios que lleven más de 14 días activos se marcan como 🏆 Winner y los de 7-14 días como 🔥 Hot automáticamente.
+            Haz scraping regularmente para detectarlos antes que la competencia.
               Haz scraping de tus competidores varias veces para empezar a detectarlos.
             </p>
           </div>

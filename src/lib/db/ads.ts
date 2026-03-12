@@ -15,14 +15,14 @@ function computeDaysActive(startDate: Date | null, stopDate: Date | null): numbe
 
 /**
  * Winner status — based ONLY on how many days the ad was active.
- * Doesn't matter if it's currently running or stopped.
- *   < 5 days  → "normal"
- *   5-10 days → "posible_winner"
- *   > 10 days → "winner"
+ * Thresholds align with UI badges:
+ *   < 7 days  → "normal"
+ *   7-14 days → "posible_winner" (🔥 Hot en UI)
+ *   > 14 days → "winner"        (🏆 Winner en UI)
  */
 function computeAdStatus(daysActive: number): string {
-  if (daysActive > 10) return 'winner'
-  if (daysActive >= 5) return 'posible_winner'
+  if (daysActive > 14) return 'winner'
+  if (daysActive >= 7) return 'posible_winner'
   return 'normal'
 }
 

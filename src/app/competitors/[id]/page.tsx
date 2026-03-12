@@ -295,20 +295,36 @@ export default function CompetitorProfilePage() {
         <section>
           <div className="flex items-center gap-3 mb-5">
             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Anuncios</h2>
-            <span className="text-sm text-slate-500">
-              {adStatusCounts.total} total
-              {adStatusCounts.winner > 0 && <> · <span className="text-amber-600 font-semibold">{adStatusCounts.winner} winners</span></>}
-              {adStatusCounts.posible_winner > 0 && <> · <span className="text-orange-500 font-semibold">{adStatusCounts.posible_winner} posibles</span></>}
-            </span>
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>{adStatusCounts.total} total</span>
+              {adStatusCounts.winner > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-lg bg-amber-100 text-amber-700">
+                  🏆 {adStatusCounts.winner}
+                </span>
+              )}
+              {adStatusCounts.posible_winner > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-lg bg-orange-100 text-orange-700">
+                  🔥 {adStatusCounts.posible_winner}
+                </span>
+              )}
+              {adStatusCounts.active > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-700">
+                  ● {adStatusCounts.active} activos
+                </span>
+              )}
+            </div>
             <div className="flex-1 h-px bg-slate-100" />
+            <Link href={`/ads?competitorId=${id}`} className="text-xs font-semibold text-violet-600 hover:text-violet-800 flex-shrink-0">
+              Ver todos →
+            </Link>
           </div>
 
           {/* Filter tabs */}
           <div className="flex flex-wrap items-center gap-2 mb-5">
             {([
               { label: 'Todos', value: 'all' as const, count: adStatusCounts.total, color: 'bg-violet-600' },
-              { label: 'Winners', value: 'winners' as const, count: adStatusCounts.winner, color: 'bg-amber-600' },
-              { label: 'Posibles', value: 'posible' as const, count: adStatusCounts.posible_winner, color: 'bg-orange-500' },
+              { label: '🏆 Winners', value: 'winners' as const, count: adStatusCounts.winner, color: 'bg-amber-500' },
+              { label: '🔥 Hot', value: 'posible' as const, count: adStatusCounts.posible_winner, color: 'bg-orange-500' },
               { label: 'Activos', value: 'active' as const, count: adStatusCounts.active, color: 'bg-emerald-600' },
               { label: 'Inactivos', value: 'inactive' as const, count: adStatusCounts.inactive, color: 'bg-slate-600' },
             ]).map(({ label, value, count, color }) => (
@@ -317,7 +333,7 @@ export default function CompetitorProfilePage() {
                 onClick={() => setAdFilter(value)}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
                   adFilter === value
-                    ? `${color} text-white`
+                    ? `${color} text-white shadow-sm`
                     : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
                 }`}
               >
@@ -332,8 +348,8 @@ export default function CompetitorProfilePage() {
                 onChange={(e) => setAdSort(e.target.value as AdSort)}
                 className="h-8 pl-3 pr-7 bg-white border border-slate-200 rounded-xl text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-400 appearance-none cursor-pointer"
               >
-                <option value="recent">Más recientes</option>
                 <option value="daysActive">Más días activo</option>
+                <option value="recent">Más recientes</option>
                 <option value="oldest">Más antiguos</option>
               </select>
               <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -348,15 +364,27 @@ export default function CompetitorProfilePage() {
                 {ads.length === 0 ? 'Sin anuncios todavía' : 'Sin anuncios en este filtro'}
               </p>
               {ads.length === 0 && (
-                <button onClick={handleScrape} className="text-sm text-violet-600 font-medium hover:underline">
+                <button onClick={handleScrape} className="text-sm text-violet-600 font-semibold hover:underline">
                   Buscar anuncios →
                 </button>
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visibleAds.map((ad) => <AdCard key={ad.id} ad={ad} />)}
-            </div>
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {visibleAds.slice(0, 24).map((ad) => <AdCard key={ad.id} ad={ad} />)}
+              </div>
+              {visibleAds.length > 24 && (
+                <div className="mt-5 text-center">
+                  <Link
+                    href={`/ads?competitorId=${id}${adFilter === 'winners' ? '&adStatus=winner' : adFilter === 'posible' ? '&adStatus=posible_winner' : adFilter === 'active' ? '&isActive=true' : adFilter === 'inactive' ? '&isActive=false' : ''}`}
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-violet-600 hover:text-violet-800 px-4 py-2 rounded-xl bg-violet-50 hover:bg-violet-100 transition-colors"
+                  >
+                    Ver los {visibleAds.length - 24} restantes →
+                  </Link>
+                </div>
+              )}
+            </>
           )}
         </section>
 
@@ -371,10 +399,18 @@ export default function CompetitorProfilePage() {
           {landingPages.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-100 p-10 text-center">
               <p className="text-sm text-slate-400">Sin landing pages todavía</p>
+              <p className="text-xs text-slate-400 mt-1">Se descubren automáticamente durante el scraping completo</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {landingPages.map((page) => <LandingPageCard key={page.id} page={page} />)}
+              {landingPages.slice(0, 12).map((page) => <LandingPageCard key={page.id} page={page} />)}
+              {landingPages.length > 12 && (
+                <div className="bg-slate-50 rounded-2xl border border-dashed border-slate-200 flex items-center justify-center p-8">
+                  <p className="text-sm text-slate-400 text-center">
+                    +{landingPages.length - 12} landing pages más
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </section>

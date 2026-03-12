@@ -1,15 +1,5 @@
-function parseRedisUrl(url: string) {
-  const parsed = new URL(url)
-  return {
-    host: parsed.hostname,
-    port: parseInt(parsed.port || '6379'),
-    password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
-    username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
-    maxRetriesPerRequest: null as null,
-    enableReadyCheck: false,
-    tls: parsed.protocol === 'rediss:' ? {} : undefined,
-  }
-}
+// Shared parser from bullmq.ts — eliminates code duplication
+import { parseRedisUrl } from './bullmq'
 
 function getIORedis() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports

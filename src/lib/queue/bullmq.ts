@@ -1,7 +1,8 @@
 import { Queue } from 'bullmq'
 import type { ScrapeJobData } from '@/types/scrape'
 
-function parseRedisUrl(url: string) {
+/** Shared Redis URL parser — used by bullmq.ts and events.ts */
+export function parseRedisUrl(url: string) {
   const parsed = new URL(url)
   return {
     host: parsed.hostname,
