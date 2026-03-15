@@ -3,6 +3,7 @@ import { listCompetitors, createCompetitor } from '@/lib/db/competitors'
 import { createScrapeJob } from '@/lib/db/jobs'
 import { getScrapeQueue, isRedisAvailable } from '@/lib/queue/bullmq'
 import { getSettings } from '@/lib/db/settings'
+import { db } from '@/lib/db/client'
 import type { JobType } from '@/types/scrape'
 
 export async function GET(req: NextRequest) {
@@ -23,6 +24,20 @@ export async function POST(req: NextRequest) {
 
     if (!name?.trim()) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+    }
+
+    // Check for existing competitor with same name + clientId to avoid duplicates
+    const existing = await db.competitor.findFirst({
+      where: {
+        name: { equals: name.trim(), mode: 'insensitive' },
+        ...(clientId ? { clientId } : { clientId: null }),
+      },
+    })
+    if (existing) {
+      return NextResponse.json(
+        { error: 'Competitor already exists', competitorId: existing.id },
+        { status: 409 }
+      )
     }
 
     const competitor = await createCompetitor({

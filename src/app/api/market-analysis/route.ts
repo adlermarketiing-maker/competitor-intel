@@ -79,8 +79,24 @@ export async function POST(req: NextRequest) {
     }
 
     if (reviews.length < 3) {
+      // Count total courses found to help diagnose the issue
+      const totalCourses = await db.platformCourse.count({
+        where: competitorId
+          ? { competitorId }
+          : keywords?.trim()
+            ? { OR: [
+                { title: { contains: keywords.trim(), mode: 'insensitive' } },
+                { search: { keywords: { contains: keywords.trim(), mode: 'insensitive' } } },
+              ] }
+            : {},
+      })
       return NextResponse.json(
-        { error: `Solo se encontraron ${reviews.length} reseñas. Necesitas al menos 3. Busca primero reseñas en las plataformas.` },
+        {
+          error: `Solo se encontraron ${reviews.length} reseñas (mínimo 3). Se encontraron ${totalCourses} cursos/productos pero sin suficientes reseñas con texto. Scrapea plataformas con reseñas activas primero.`,
+          reviewsFound: reviews.length,
+          coursesFound: totalCourses,
+          minRequired: 3,
+        },
         { status: 400 }
       )
     }

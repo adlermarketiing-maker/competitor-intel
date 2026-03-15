@@ -29,7 +29,22 @@ export async function POST(
       return NextResponse.json({ error: 'No hay landing pages scrapeadas. Lanza un scrape primero.' }, { status: 400 })
     }
 
-    const analysis = await analyzeFunnel({ competitorName: competitor.name, pages: landingPages })
+    // Filter out pages with no meaningful content to avoid sending empty data to Claude
+    const pagesWithContent = landingPages.filter((p) =>
+      (p.bodyText && p.bodyText.length > 50) ||
+      p.h1Texts.length > 0 ||
+      p.h2Texts.length > 0 ||
+      p.ctaTexts.length > 0
+    )
+
+    if (pagesWithContent.length === 0) {
+      return NextResponse.json(
+        { error: `Hay ${landingPages.length} landing pages pero ninguna tiene contenido suficiente para analizar. Puede que el scraping no haya podido extraer el texto (páginas con JavaScript pesado, protección anti-bot, etc.).` },
+        { status: 400 }
+      )
+    }
+
+    const analysis = await analyzeFunnel({ competitorName: competitor.name, pages: pagesWithContent })
 
     // Auto-generate Semrush URL
     let semrushUrl = competitor.semrushUrl
