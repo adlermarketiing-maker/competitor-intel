@@ -353,6 +353,137 @@ model OrganicPost {
   @@index([platform, scrapedAt])
 }
 
+// ── Weekly Ad Research ──────────────────────────────────────
+
+// Singleton config for the weekly research job
+model ResearchConfig {
+  id              String   @id @default("singleton")
+  enabled         Boolean  @default(true)
+  schedule        String   @default("0 2 * * 0")  // Sunday 02:00
+  timezone        String   @default("Europe/Madrid")
+  maxAdsPerMarket Int      @default(150)
+  updatedAt       DateTime @updatedAt
+
+  markets ResearchMarket[]
+}
+
+// One market to scan (e.g. Brazilian, US, Hispanic, Russian, French)
+model ResearchMarket {
+  id        String         @id @default(cuid())
+  configId  String
+  config    ResearchConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  name      String            // "Brazilian", "US", "Hispanic", "Russian", "French"
+  language  String            // "pt", "en", "es", "ru", "fr"
+  countries String[]          // ["BR"], ["US","CA","GB","AU"], etc.
+  keywords  String[]          // Pool of search keywords for this market
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([configId])
+}
+
+// One weekly execution of the research pipeline
+model ResearchRun {
+  id               String   @id @default(cuid())
+  weekLabel        String                  // "2026-W11" style label
+  status           String   @default("PENDING")  // PENDING, RUNNING, COMPLETE, FAILED
+  totalAdsFound    Int      @default(0)
+  totalAdsKept     Int      @default(0)
+  totalAdsAnalyzed Int      @default(0)
+  apiCallsUsed     Int      @default(0)
+  errorMessage     String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime @default(now())
+
+  ads     ResearchAd[]
+  reports ResearchReport[]
+
+  @@index([weekLabel])
+  @@index([status])
+}
+
+// An ad discovered during weekly research
+model ResearchAd {
+  id            String      @id @default(cuid())
+  runId         String
+  run           ResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  market        String                  // "Brazilian", "US", etc.
+  searchKeyword String                  // Which keyword found this ad
+
+  // Ad fields (same as Ad model)
+  metaAdId      String
+  pageName      String?
+  pageId        String?
+  adCopyBodies  String[]
+  headline      String?
+  description   String?
+  caption       String?
+  landingUrl    String?
+  adSnapshotUrl String?
+  imageUrls     String[]
+  videoUrls     String[]
+  platforms     String[]
+
+  isActive    Boolean  @default(true)
+  daysActive  Int      @default(0)
+  startDate   DateTime?
+  stopDate    DateTime?
+
+  // AI classification (relevance filter)
+  adCategory      String?  // infoproduct, service, agency, ecommerce, betting, entertainment, other
+  niche           String?  // Detected niche: "marketing digital", "fitness coaching", etc.
+  language        String?  // Detected language of the ad copy
+  isRelevant      Boolean  @default(true)
+  relevanceScore  Int?     // 1-10 relevance to infoproducer niche
+
+  // AI full analysis (same as Ad model)
+  aiAnalyzed      Boolean  @default(false)
+  hookType        String?
+  marketingAngle  String?
+  creativeFormat  String?
+  awarenessLevel  String?
+  copyLength      String?
+  copyStructure   String?
+  ctaText         String?
+  ctaUrgency      Boolean?
+  aiScore         Int?
+  aiSummary       String?
+
+  // Research-specific: innovation / creative quality
+  innovationScore Int?     // 1-10: originality of format + adaptation potential
+
+  createdAt   DateTime @default(now())
+
+  @@unique([runId, metaAdId])
+  @@index([runId])
+  @@index([market])
+  @@index([aiScore])
+  @@index([innovationScore])
+  @@index([isRelevant])
+  @@index([niche])
+  @@index([creativeFormat])
+  @@index([hookType])
+  @@index([daysActive])
+}
+
+// Opus 4.6 report generated per market (+ one global)
+model ResearchReport {
+  id         String      @id @default(cuid())
+  runId      String
+  run        ResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  market     String      // "Brazilian", "US", "Hispanic", "Russian", "French", "global"
+  reportHtml String      @db.Text  // Full HTML report from Opus 4.6
+  topFormats Json?       // [{ name, count, pct }]
+  topAngles  Json?       // [{ name, count, pct }]
+  topHooks   Json?       // [{ name, count, pct }]
+  highlights Json?       // [{ metaAdId, innovationScore, reason }]
+  createdAt  DateTime    @default(now())
+
+  @@unique([runId, market])
+  @@index([runId])
+}
+
 // Cross-analysis opportunities (organic trends vs ads)
 model TrendOpportunity {
   id           String   @id @default(cuid())

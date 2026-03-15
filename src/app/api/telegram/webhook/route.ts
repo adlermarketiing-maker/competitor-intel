@@ -60,6 +60,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    // /research — Latest weekly research digest
+    if (text === '/research') {
+      try {
+        const { buildResearchTelegramDigest } = await import('@/lib/telegram/researchDigest')
+        const { getLatestCompleteRun } = await import('@/lib/db/research')
+        const latestRun = await getLatestCompleteRun()
+        if (latestRun) {
+          const digest = await buildResearchTelegramDigest(latestRun.id)
+          if (digest) {
+            await sendTelegramMessage(digest, chatId)
+          } else {
+            await sendTelegramMessage('No hay datos en la última investigación.', chatId)
+          }
+        } else {
+          await sendTelegramMessage('No hay investigaciones completadas todavía. Se ejecuta automáticamente cada domingo.', chatId)
+        }
+      } catch {
+        await sendTelegramMessage('Error obteniendo la investigación semanal.', chatId)
+      }
+      return NextResponse.json({ ok: true })
+    }
+
     // /help — Show available commands
     if (text === '/help' || text === '/start') {
       await sendTelegramMessage(
@@ -69,6 +91,7 @@ export async function POST(req: NextRequest) {
           '<b>Comandos:</b>',
           '/competencia [nombre] — Análisis de un competidor',
           '/digest — Digest diario bajo demanda',
+          '/research — Última investigación semanal de ads',
           '/help — Ver este mensaje',
         ].join('\n'),
         chatId,

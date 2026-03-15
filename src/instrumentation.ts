@@ -43,5 +43,11 @@ export async function register() {
       startMarketWorker()
       await setupMarketSchedule()
     })
+
+    await startWithRetry('Weekly research worker', async () => {
+      const { startResearchWorker, setupResearchSchedule } = await import('./lib/queue/researchWorker')
+      startResearchWorker()
+      await setupResearchSchedule()
+    })
   }
 }
