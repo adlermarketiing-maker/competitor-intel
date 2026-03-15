@@ -138,51 +138,58 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
 
     await job.updateProgress(20)
 
-    // ── Step 2: Heuristic pre-filter (chunked, 500 at a time) ─
+    // ── Step 2: Heuristic pre-filter ────────────────────────
+    // Load all unclassified ads (only 4 lightweight fields — ~3KB per ad)
     const { db } = await import('@/lib/db/client')
-    let totalUnclassified = await countUnclassifiedAds(runId)
-    let heuristicPassed = 0
-    let heuristicRejected = 0
+    const allUnclassified = await db.researchAd.findMany({
+      where: { runId: runId, adCategory: null },
+      select: { id: true, adCopyBodies: true, headline: true, landingUrl: true },
+    })
 
-    console.log(`[Research] Heuristic filter: ${totalUnclassified} ads to process...`)
+    console.log(`[Research] Heuristic filter: ${allUnclassified.length} ads to process...`)
 
-    while (totalUnclassified > 0) {
-      const chunk = await getUnclassifiedAds(runId, 500)
-      if (chunk.length === 0) break
+    const rejectIds: string[] = []
+    const passIds: string[] = []
 
-      const rejectIds: string[] = []
-      for (const ad of chunk) {
-        const copyText = ad.adCopyBodies.join(' ')
-        if (!heuristicFilter({ copyText, headline: ad.headline, landingUrl: ad.landingUrl })) {
-          rejectIds.push(ad.id)
-        } else {
-          heuristicPassed++
-        }
+    for (const ad of allUnclassified) {
+      const copyText = ad.adCopyBodies.join(' ')
+      if (!heuristicFilter({ copyText, headline: ad.headline, landingUrl: ad.landingUrl })) {
+        rejectIds.push(ad.id)
+      } else {
+        passIds.push(ad.id)
       }
-
-      if (rejectIds.length > 0) {
-        await db.researchAd.updateMany({
-          where: { id: { in: rejectIds } },
-          data: { adCategory: 'other', isRelevant: false, relevanceScore: 0 },
-        })
-        heuristicRejected += rejectIds.length
-      }
-
-      totalUnclassified = await countUnclassifiedAds(runId)
-      await job.updateProgress(20 + Math.round(((heuristicPassed + heuristicRejected) / (totalUnclassified + heuristicPassed + heuristicRejected)) * 10))
     }
 
-    console.log(`[Research] Heuristic filter: ${heuristicPassed} passed, ${heuristicRejected} rejected`)
+    // Batch update rejected
+    for (let i = 0; i < rejectIds.length; i += 500) {
+      await db.researchAd.updateMany({
+        where: { id: { in: rejectIds.slice(i, i + 500) } },
+        data: { adCategory: 'other', isRelevant: false, relevanceScore: 0 },
+      })
+    }
+    // Mark passed ads as 'pending' so they don't reappear as unclassified
+    for (let i = 0; i < passIds.length; i += 500) {
+      await db.researchAd.updateMany({
+        where: { id: { in: passIds.slice(i, i + 500) } },
+        data: { adCategory: 'pending' },
+      })
+    }
+
+    console.log(`[Research] Heuristic filter: ${passIds.length} passed, ${rejectIds.length} rejected`)
     await job.updateProgress(30)
 
-    // ── Step 3: AI classification (chunked, 10 per API call) ─
-    let remaining = await countUnclassifiedAds(runId)
-    const totalToClassify = remaining
+    // ── Step 3: AI classification (batches of 10) ────────────
+    // Query ads marked 'pending' by heuristic (NOT adCategory: null)
+    const pendingCount = await db.researchAd.count({ where: { runId: runId, adCategory: 'pending' } })
     let classified = 0
-    console.log(`[Research] Classifying ${remaining} ads with AI...`)
+    console.log(`[Research] Classifying ${pendingCount} ads with AI...`)
 
-    while (remaining > 0) {
-      const batch = await getUnclassifiedAds(runId, 10)
+    while (true) {
+      const batch = await db.researchAd.findMany({
+        where: { runId: runId, adCategory: 'pending' },
+        select: { id: true, metaAdId: true, adCopyBodies: true, headline: true, landingUrl: true },
+        take: 10,
+      })
       if (batch.length === 0) break
 
       try {
@@ -214,15 +221,15 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
         await new Promise((r) => setTimeout(r, 300))
       } catch (err) {
         console.error(`[Research] Classification error:`, err instanceof Error ? err.message : err)
-        // Mark this batch as "other" to avoid infinite loop
-        for (const ad of batch) {
-          await updateResearchAdClassification(ad.id, { adCategory: 'other', isRelevant: false, relevanceScore: 0 })
-        }
+        // Mark batch as 'other' to prevent infinite loop
+        await db.researchAd.updateMany({
+          where: { id: { in: batch.map((a) => a.id) } },
+          data: { adCategory: 'other', isRelevant: false, relevanceScore: 0 },
+        })
       }
 
-      remaining = await countUnclassifiedAds(runId)
-      if (totalToClassify > 0) {
-        await job.updateProgress(30 + Math.round(((totalToClassify - remaining) / totalToClassify) * 30))
+      if (pendingCount > 0) {
+        await job.updateProgress(30 + Math.round((classified / pendingCount) * 30))
       }
     }
     console.log(`[Research] Classification complete: ${classified} classified`)
