@@ -130,8 +130,9 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
     await updateResearchRun(runId, { totalAdsFound, totalAdsKept, apiCallsUsed })
     console.log(`[Research] Search complete: ${totalAdsFound} found, ${totalAdsKept} unique stored`)
 
-    // ── Step 2: Heuristic pre-filter ────────────────────────
+    // ── Step 2: Heuristic pre-filter (batch DB updates) ─────
     const unclassified = await getUnclassifiedAds(runId)
+    const rejectIds: string[] = []
     let heuristicPassed = 0
 
     for (const ad of unclassified) {
@@ -141,26 +142,32 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
         headline: ad.headline,
         landingUrl: ad.landingUrl,
       })
-
       if (!passes) {
-        await updateResearchAdClassification(ad.id, {
-          adCategory: 'other',
-          isRelevant: false,
-          relevanceScore: 0,
-        })
+        rejectIds.push(ad.id)
       } else {
         heuristicPassed++
       }
     }
 
-    console.log(`[Research] Heuristic filter: ${heuristicPassed}/${unclassified.length} passed`)
+    // Batch reject in chunks of 500 (single updateMany per chunk)
+    const { db } = await import('@/lib/db/client')
+    for (let i = 0; i < rejectIds.length; i += 500) {
+      await db.researchAd.updateMany({
+        where: { id: { in: rejectIds.slice(i, i + 500) } },
+        data: { adCategory: 'other', isRelevant: false, relevanceScore: 0 },
+      })
+    }
 
-    // ── Step 3: AI classification (batches of 5) ────────────
+    await job.updateProgress(30)
+    console.log(`[Research] Heuristic filter: ${heuristicPassed}/${unclassified.length} passed, ${rejectIds.length} rejected`)
+
+    // ── Step 3: AI classification (batches of 10) ───────────
     const toClassify = await getUnclassifiedAds(runId)
     console.log(`[Research] Classifying ${toClassify.length} ads with AI...`)
 
-    for (let i = 0; i < toClassify.length; i += 5) {
-      const batch = toClassify.slice(i, i + 5)
+    const CLASSIFY_BATCH = 10
+    for (let i = 0; i < toClassify.length; i += CLASSIFY_BATCH) {
+      const batch = toClassify.slice(i, i + CLASSIFY_BATCH)
       try {
         const results = await classifyResearchAds(
           batch.map((ad) => ({
@@ -173,10 +180,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
 
         for (const result of results) {
           const ad = batch.find((a) => a.metaAdId === result.metaAdId)
-          if (!ad) {
-            console.warn(`[Research] Classification result for unknown ad ${result.metaAdId}, skipping`)
-            continue
-          }
+          if (!ad) continue
           const isRelevant =
             ['infoproduct', 'service', 'agency'].includes(result.adCategory) &&
             result.relevanceScore >= 5
@@ -189,12 +193,14 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
           })
         }
 
-        // Rate limit
-        await new Promise((r) => setTimeout(r, 500))
+        // Progress + light rate limit
+        if (i % 50 === 0) await job.updateProgress(30 + Math.round((i / toClassify.length) * 30))
+        await new Promise((r) => setTimeout(r, 300))
       } catch (err) {
         console.error(`[Research] Classification error (batch ${i}):`, err instanceof Error ? err.message : err)
       }
     }
+    await job.updateProgress(60)
 
     // ── Step 4: Full ad analysis on relevant ads ────────────
     const maxAnalyze = activeMarkets.length * 60 // ~60 per market
@@ -225,7 +231,8 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
         })
         analyzed++
 
-        // Rate limit
+        // Rate limit + progress
+        if (analyzed % 20 === 0) await job.updateProgress(60 + Math.round((analyzed / toAnalyze.length) * 20))
         await new Promise((r) => setTimeout(r, 300))
       } catch (err) {
         console.error(`[Research] Analysis error for ${ad.metaAdId}:`, err instanceof Error ? err.message : err)
@@ -233,12 +240,11 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
     }
 
     await updateResearchRun(runId, { totalAdsAnalyzed: analyzed })
+    await job.updateProgress(80)
     console.log(`[Research] Analysis complete: ${analyzed} ads analyzed`)
 
     // ── Step 5: Generate Opus 4.6 reports per market ────────
     console.log('[Research] Generating reports with Opus 4.6...')
-
-    const { db } = await import('@/lib/db/client')
     const marketSummaries: Array<{
       market: string
       adCount: number
@@ -407,7 +413,7 @@ export function startResearchWorker() {
   const worker = new Worker<ResearchJobData>('weeklyResearch', processResearchJob, {
     connection: getRedisConnectionOpts(),
     concurrency: 1,
-    lockDuration: 600000, // 10 min lock (research takes a while)
+    lockDuration: 7200000, // 2 hour lock — research processes thousands of ads
   })
 
   worker.on('completed', (job) => {
