@@ -149,11 +149,17 @@ export async function updateResearchAdAnalysis(
   return db.researchAd.update({ where: { id }, data })
 }
 
-export async function getUnclassifiedAds(runId: string) {
+export async function getUnclassifiedAds(runId: string, take = 500) {
   return db.researchAd.findMany({
     where: { runId, adCategory: null },
+    select: { id: true, metaAdId: true, adCopyBodies: true, headline: true, landingUrl: true },
     orderBy: { daysActive: 'desc' },
+    take,
   })
+}
+
+export async function countUnclassifiedAds(runId: string) {
+  return db.researchAd.count({ where: { runId, adCategory: null } })
 }
 
 export async function getRelevantUnanalyzedAds(runId: string, market?: string, limit?: number) {
@@ -165,6 +171,11 @@ export async function getRelevantUnanalyzedAds(runId: string, market?: string, l
   if (market) where.market = market
   return db.researchAd.findMany({
     where,
+    select: {
+      id: true, metaAdId: true, adCopyBodies: true, headline: true,
+      description: true, caption: true, imageUrls: true, videoUrls: true,
+      daysActive: true,
+    },
     orderBy: { daysActive: 'desc' },
     ...(limit ? { take: limit } : {}),
   })
