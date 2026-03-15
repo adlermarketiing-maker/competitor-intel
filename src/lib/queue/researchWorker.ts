@@ -74,14 +74,17 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
 
   console.log(`[Research] Starting weekly research for ${weekLabel}...`)
 
-  const run = await createResearchRun(weekLabel)
-  await updateResearchRun(run.id, { status: 'RUNNING', startedAt: now })
-
-  let totalAdsFound = 0
-  let totalAdsKept = 0
-  let apiCallsUsed = 0
+  let runId: string | null = null
 
   try {
+    const run = await createResearchRun(weekLabel)
+    runId = run.id
+    await updateResearchRun(runId, { status: 'RUNNING', startedAt: now })
+
+    let totalAdsFound = 0
+    let totalAdsKept = 0
+    let apiCallsUsed = 0
+
     // ── Step 1: Search each market ──────────────────────────
     for (const market of activeMarkets) {
       const keywords = getWeeklyKeywords(market.keywords, weekNum, 4)
@@ -96,7 +99,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
             maxPages: 10,
             onLog: (msg) => console.log(`[Research] ${market.name}/${keyword}: ${msg}`),
             onProgress: (info) => {
-              apiCallsUsed = Math.max(apiCallsUsed, info.page)
+              apiCallsUsed = info.page // tracks total API pages fetched so far
             },
           })
 
@@ -106,7 +109,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
               if (!raw.id) continue
               totalAdsFound++
               try {
-                await upsertResearchAd(run.id, market.name, keyword, raw)
+                await upsertResearchAd(runId, market.name, keyword, raw)
                 totalAdsKept++
               } catch {
                 // Duplicate within run — skip
@@ -124,11 +127,11 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
       console.log(`[Research] ${market.name}: ${totalAdsKept} ads stored`)
     }
 
-    await updateResearchRun(run.id, { totalAdsFound, totalAdsKept, apiCallsUsed })
+    await updateResearchRun(runId, { totalAdsFound, totalAdsKept, apiCallsUsed })
     console.log(`[Research] Search complete: ${totalAdsFound} found, ${totalAdsKept} unique stored`)
 
     // ── Step 2: Heuristic pre-filter ────────────────────────
-    const unclassified = await getUnclassifiedAds(run.id)
+    const unclassified = await getUnclassifiedAds(runId)
     let heuristicPassed = 0
 
     for (const ad of unclassified) {
@@ -153,7 +156,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
     console.log(`[Research] Heuristic filter: ${heuristicPassed}/${unclassified.length} passed`)
 
     // ── Step 3: AI classification (batches of 5) ────────────
-    const toClassify = await getUnclassifiedAds(run.id)
+    const toClassify = await getUnclassifiedAds(runId)
     console.log(`[Research] Classifying ${toClassify.length} ads with AI...`)
 
     for (let i = 0; i < toClassify.length; i += 5) {
@@ -169,7 +172,11 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
         )
 
         for (const result of results) {
-          const ad = batch.find((a) => a.metaAdId === result.metaAdId) ?? batch[0]
+          const ad = batch.find((a) => a.metaAdId === result.metaAdId)
+          if (!ad) {
+            console.warn(`[Research] Classification result for unknown ad ${result.metaAdId}, skipping`)
+            continue
+          }
           const isRelevant =
             ['infoproduct', 'service', 'agency'].includes(result.adCategory) &&
             result.relevanceScore >= 5
@@ -190,9 +197,8 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
     }
 
     // ── Step 4: Full ad analysis on relevant ads ────────────
-    const relevantAds = await getRelevantUnanalyzedAds(run.id)
     const maxAnalyze = activeMarkets.length * 60 // ~60 per market
-    const toAnalyze = relevantAds.slice(0, maxAnalyze)
+    const toAnalyze = await getRelevantUnanalyzedAds(runId, undefined, maxAnalyze)
     console.log(`[Research] Analyzing ${toAnalyze.length} relevant ads with AI...`)
 
     let analyzed = 0
@@ -226,7 +232,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
       }
     }
 
-    await updateResearchRun(run.id, { totalAdsAnalyzed: analyzed })
+    await updateResearchRun(runId, { totalAdsAnalyzed: analyzed })
     console.log(`[Research] Analysis complete: ${analyzed} ads analyzed`)
 
     // ── Step 5: Generate Opus 4.6 reports per market ────────
@@ -245,7 +251,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
 
     for (const market of activeMarkets) {
       const marketAds = await db.researchAd.findMany({
-        where: { runId: run.id, market: market.name, isRelevant: true, aiAnalyzed: true },
+        where: { runId: runId, market: market.name, isRelevant: true, aiAnalyzed: true },
         orderBy: { innovationScore: 'desc' },
       })
 
@@ -277,7 +283,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
         const report = await generateMarketReport(market.name, adSummaries, weekLabel)
 
         await saveResearchReport({
-          runId: run.id,
+          runId: runId,
           market: market.name,
           reportHtml: report.reportHtml,
           topFormats: report.topFormats,
@@ -307,7 +313,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
       try {
         const globalHtml = await generateGlobalReport(marketSummaries, weekLabel)
         await saveResearchReport({
-          runId: run.id,
+          runId: runId,
           market: 'global',
           reportHtml: globalHtml,
         })
@@ -323,7 +329,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
       const { isTelegramConfigured, sendTelegramMessage } = await import('@/lib/telegram/client')
 
       if (isTelegramConfigured()) {
-        const digest = await buildResearchTelegramDigest(run.id)
+        const digest = await buildResearchTelegramDigest(runId)
         if (digest) {
           await sendTelegramMessage(digest)
           console.log('[Research] Telegram digest sent')
@@ -334,7 +340,7 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
     }
 
     // ── Done ────────────────────────────────────────────────
-    await updateResearchRun(run.id, {
+    await updateResearchRun(runId, {
       status: 'COMPLETE',
       completedAt: new Date(),
       totalAdsAnalyzed: analyzed,
@@ -345,11 +351,17 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[Research] Fatal error:', msg)
-    await updateResearchRun(run.id, {
-      status: 'FAILED',
-      errorMessage: msg,
-      completedAt: new Date(),
-    })
+    if (runId) {
+      try {
+        await updateResearchRun(runId, {
+          status: 'FAILED',
+          errorMessage: msg,
+          completedAt: new Date(),
+        })
+      } catch (updateErr) {
+        console.error('[Research] Could not mark run as failed:', updateErr)
+      }
+    }
   }
 }
 

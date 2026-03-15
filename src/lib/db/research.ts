@@ -75,8 +75,16 @@ export async function upsertResearchAd(
     .map((v) => v.video_hd_url || v.video_sd_url)
     .filter(Boolean) as string[]
 
-  const startDate = raw.ad_delivery_start_time ? new Date(raw.ad_delivery_start_time) : null
-  const stopDate = raw.ad_delivery_stop_time ? new Date(raw.ad_delivery_stop_time) : null
+  let startDate: Date | null = null
+  if (raw.ad_delivery_start_time) {
+    const d = new Date(raw.ad_delivery_start_time)
+    if (!isNaN(d.getTime())) startDate = d
+  }
+  let stopDate: Date | null = null
+  if (raw.ad_delivery_stop_time) {
+    const d = new Date(raw.ad_delivery_stop_time)
+    if (!isNaN(d.getTime())) stopDate = d
+  }
   const isActive = !raw.ad_delivery_stop_time
   const daysActive = startDate ? daysBetween(startDate, stopDate ?? new Date()) : 0
 
@@ -148,7 +156,7 @@ export async function getUnclassifiedAds(runId: string) {
   })
 }
 
-export async function getRelevantUnanalyzedAds(runId: string, market?: string) {
+export async function getRelevantUnanalyzedAds(runId: string, market?: string, limit?: number) {
   const where: Record<string, unknown> = {
     runId,
     isRelevant: true,
@@ -158,6 +166,7 @@ export async function getRelevantUnanalyzedAds(runId: string, market?: string) {
   return db.researchAd.findMany({
     where,
     orderBy: { daysActive: 'desc' },
+    ...(limit ? { take: limit } : {}),
   })
 }
 

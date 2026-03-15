@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listResearchAds } from '@/lib/db/research'
 
+function safeInt(val: string | null): number | undefined {
+  if (!val) return undefined
+  const n = parseInt(val, 10)
+  return isNaN(n) ? undefined : n
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams
@@ -12,8 +18,8 @@ export async function GET(req: NextRequest) {
       hookType: sp.get('hookType') || undefined,
       marketingAngle: sp.get('marketingAngle') || undefined,
       creativeFormat: sp.get('creativeFormat') || undefined,
-      minScore: sp.has('minScore') ? parseInt(sp.get('minScore')!) : undefined,
-      minInnovation: sp.has('minInnovation') ? parseInt(sp.get('minInnovation')!) : undefined,
+      minScore: safeInt(sp.get('minScore')),
+      minInnovation: safeInt(sp.get('minInnovation')),
       sortBy: sp.get('sortBy') || undefined,
       page: sp.has('page') ? parseInt(sp.get('page')!) : 1,
       limit: sp.has('limit') ? parseInt(sp.get('limit')!) : 24,

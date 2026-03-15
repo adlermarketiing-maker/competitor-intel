@@ -49,7 +49,10 @@ export default function ResearchPage() {
   // Load runs
   useEffect(() => {
     fetch('/api/research')
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
       .then((data) => {
         if (Array.isArray(data)) {
           setRuns(data)
@@ -57,19 +60,21 @@ export default function ResearchPage() {
           if (latest) setSelectedRunId(latest.id)
         }
       })
-      .catch(() => {})
+      .catch((err) => console.error('[Research] Error loading runs:', err))
       .finally(() => setLoading(false))
   }, [])
 
   // Load reports for selected run
   useEffect(() => {
     if (!selectedRunId) return
+    let cancelled = false
     fetch(`/api/research/${selectedRunId}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.reports) setReports(data.reports)
+        if (!cancelled && data.reports) setReports(data.reports)
       })
       .catch(() => {})
+    return () => { cancelled = true }
   }, [selectedRunId])
 
   // Load ads

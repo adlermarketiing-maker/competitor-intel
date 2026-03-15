@@ -49,7 +49,7 @@ export async function buildResearchTelegramDigest(runId: string): Promise<string
     }
 
     // Highlights
-    const highlights = (report.highlights as Array<{ metaAdId: string; innovationScore: number }>) || []
+    const highlights = (report.highlights as Array<{ metaAdId: string; innovationScore?: number }>) || []
     if (highlights.length > 0) {
       lines.push(`⭐ ${highlights.length} ads destacados (innovation ≥ 8)`)
     }
