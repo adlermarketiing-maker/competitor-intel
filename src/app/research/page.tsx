@@ -108,12 +108,19 @@ export default function ResearchPage() {
     if (view === 'ads') loadAds()
   }, [view, loadAds])
 
-  const handleTrigger = async () => {
+  const handleTrigger = async (resumeRunId?: string) => {
     setTriggering(true)
     try {
-      const res = await fetch('/api/research/trigger', { method: 'POST' })
+      const res = await fetch('/api/research/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(resumeRunId ? { resumeRunId } : {}),
+      })
       if (res.ok) {
-        alert('Investigación lanzada. Puede tardar 1-3 horas.')
+        const data = await res.json()
+        alert(data.resumed
+          ? 'Reanudando análisis del run existente. Los ads ya están guardados, solo se ejecuta clasificación + informe.'
+          : 'Investigación completa lanzada. Puede tardar 1-3 horas.')
       } else {
         const data = await res.json()
         alert(data.error || 'Error al lanzar')
@@ -178,12 +185,21 @@ export default function ResearchPage() {
               ))}
             </select>
           )}
+          {latestRun && latestRun.totalAdsFound > 0 && latestRun.totalAdsAnalyzed === 0 && (
+            <button
+              onClick={() => handleTrigger(latestRun.id)}
+              disabled={triggering || !!runningJob}
+              className="h-9 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {triggering ? 'Lanzando...' : 'Analizar ads existentes'}
+            </button>
+          )}
           <button
-            onClick={handleTrigger}
+            onClick={() => handleTrigger()}
             disabled={triggering || !!runningJob}
             className="h-9 px-4 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {triggering ? 'Lanzando...' : 'Ejecutar ahora'}
+            {triggering ? 'Lanzando...' : 'Ejecutar nuevo'}
           </button>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { getRedisConnectionOpts } from './bullmq'
 
 interface ResearchJobData {
   type: 'weekly-research'
+  resumeRunId?: string  // If set, skip search and resume analysis on existing run
 }
 
 let _researchQueue: Queue | null = null
@@ -71,64 +72,71 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
   const now = new Date()
   const weekNum = getWeekNumber(now)
   const weekLabel = `${now.getFullYear()}-W${String(weekNum).padStart(2, '0')}`
-
-  console.log(`[Research] Starting weekly research for ${weekLabel}...`)
+  const isResume = !!job.data.resumeRunId
 
   let runId: string | null = null
 
   try {
-    const run = await createResearchRun(weekLabel)
-    runId = run.id
-    await updateResearchRun(runId, { status: 'RUNNING', startedAt: now })
+    // ── Resume existing run or create new one ──
+    if (isResume) {
+      runId = job.data.resumeRunId!
+      console.log(`[Research] Resuming run ${runId} — skipping search, starting analysis...`)
+      await updateResearchRun(runId, { status: 'RUNNING', startedAt: now })
+    } else {
+      console.log(`[Research] Starting weekly research for ${weekLabel}...`)
+      const run = await createResearchRun(weekLabel)
+      runId = run.id
+      await updateResearchRun(runId, { status: 'RUNNING', startedAt: now })
 
-    let totalAdsFound = 0
-    let totalAdsKept = 0
-    let apiCallsUsed = 0
+      let totalAdsFound = 0
+      let totalAdsKept = 0
+      let apiCallsUsed = 0
 
-    // ── Step 1: Search each market ──────────────────────────
-    for (const market of activeMarkets) {
-      const keywords = getWeeklyKeywords(market.keywords, weekNum, 4)
-      console.log(`[Research] ${market.name}: searching ${keywords.length} keywords: ${keywords.join(', ')}`)
+      // ── Step 1: Search each market ──────────────────────────
+      for (const market of activeMarkets) {
+        const keywords = getWeeklyKeywords(market.keywords, weekNum, 4)
+        console.log(`[Research] ${market.name}: searching ${keywords.length} keywords: ${keywords.join(', ')}`)
 
-      for (const keyword of keywords) {
-        try {
-          const results = await searchAdsByKeyword(apiKey, {
-            keywords: keyword,
-            countries: market.countries,
-            activeStatus: 'ACTIVE',
-            maxPages: 10,
-            onLog: (msg) => console.log(`[Research] ${market.name}/${keyword}: ${msg}`),
-            onProgress: (info) => {
-              apiCallsUsed = info.page // tracks total API pages fetched so far
-            },
-          })
+        for (const keyword of keywords) {
+          try {
+            const results = await searchAdsByKeyword(apiKey, {
+              keywords: keyword,
+              countries: market.countries,
+              activeStatus: 'ACTIVE',
+              maxPages: 10,
+              onLog: (msg) => console.log(`[Research] ${market.name}/${keyword}: ${msg}`),
+              onProgress: (info) => {
+                apiCallsUsed = info.page
+              },
+            })
 
-          // Flatten all ads from all advertisers
-          for (const advertiser of results) {
-            for (const raw of advertiser.ads) {
-              if (!raw.id) continue
-              totalAdsFound++
-              try {
-                await upsertResearchAd(runId, market.name, keyword, raw)
-                totalAdsKept++
-              } catch {
-                // Duplicate within run — skip
+            for (const advertiser of results) {
+              for (const raw of advertiser.ads) {
+                if (!raw.id) continue
+                totalAdsFound++
+                try {
+                  await upsertResearchAd(runId, market.name, keyword, raw)
+                  totalAdsKept++
+                } catch {
+                  // Duplicate within run — skip
+                }
               }
             }
-          }
 
-          // Rate limit between keyword searches
-          await new Promise((r) => setTimeout(r, 2000))
-        } catch (err) {
-          console.error(`[Research] Error searching ${market.name}/${keyword}:`, err instanceof Error ? err.message : err)
+            await new Promise((r) => setTimeout(r, 2000))
+          } catch (err) {
+            console.error(`[Research] Error searching ${market.name}/${keyword}:`, err instanceof Error ? err.message : err)
+          }
         }
+
+        console.log(`[Research] ${market.name}: ${totalAdsKept} ads stored`)
       }
 
-      console.log(`[Research] ${market.name}: ${totalAdsKept} ads stored`)
+      await updateResearchRun(runId, { totalAdsFound, totalAdsKept, apiCallsUsed })
+      console.log(`[Research] Search complete: ${totalAdsFound} found, ${totalAdsKept} unique stored`)
     }
 
-    await updateResearchRun(runId, { totalAdsFound, totalAdsKept, apiCallsUsed })
-    console.log(`[Research] Search complete: ${totalAdsFound} found, ${totalAdsKept} unique stored`)
+    await job.updateProgress(20)
 
     // ── Step 2: Heuristic pre-filter (batch DB updates) ─────
     const unclassified = await getUnclassifiedAds(runId)
