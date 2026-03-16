@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getResearchQueue } from '@/lib/queue/researchWorker'
 import { isRedisAvailable } from '@/lib/queue/bullmq'
-import { runResearchAnalysis } from '@/lib/analysis/runResearchAnalysis'
+
+// Store running analysis in globalThis so it survives API route lifecycle
+const _global = globalThis as unknown as { __researchRunning?: boolean }
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +15,9 @@ export async function POST(req: NextRequest) {
       if (!process.env.ANTHROPIC_API_KEY) {
         return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 400 })
       }
+      if (_global.__researchRunning) {
+        return NextResponse.json({ error: 'Ya hay un análisis en ejecución' }, { status: 409 })
+      }
 
       // Validate run exists
       const { db } = await import('@/lib/db/client')
@@ -21,9 +26,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Run no encontrado' }, { status: 404 })
       }
 
-      // Fire-and-forget — runs in the Node.js process background
-      runResearchAnalysis(resumeRunId).catch((err) => {
-        console.error('[Research] Background analysis failed:', err)
+      // Start analysis in a detached context using setImmediate
+      _global.__researchRunning = true
+      setImmediate(async () => {
+        try {
+          const { runResearchAnalysis } = await import('@/lib/analysis/runResearchAnalysis')
+          await runResearchAnalysis(resumeRunId)
+        } catch (err) {
+          console.error('[Research] Background analysis failed:', err)
+        } finally {
+          _global.__researchRunning = false
+        }
       })
 
       return NextResponse.json({ ok: true, resumed: true, runId: resumeRunId })
