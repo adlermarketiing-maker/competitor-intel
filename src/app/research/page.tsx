@@ -298,6 +298,20 @@ export default function ResearchPage() {
       {/* Report view */}
       {view === 'report' && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 lg:p-8">
+          {selectedReport && selectedRunId && (
+            <div className="flex items-center justify-end gap-2 mb-4">
+              <a
+                href={`/api/research/${selectedRunId}/export?market=${market === 'Todos' ? 'global' : market}`}
+                download
+                className="inline-flex items-center gap-2 h-9 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Descargar .docx
+              </a>
+            </div>
+          )}
           {selectedReport ? (
             <div
               className="prose prose-slate max-w-none prose-headings:text-slate-900 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-lg prose-p:text-slate-600 prose-p:leading-relaxed prose-blockquote:border-violet-300 prose-blockquote:text-slate-500 prose-blockquote:italic prose-a:text-violet-600 prose-strong:text-slate-800 prose-li:text-slate-600 prose-ul:text-slate-600"

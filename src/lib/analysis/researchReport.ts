@@ -8,6 +8,40 @@ function getClient(): Anthropic {
   return _client
 }
 
+// Models to try in order — best to worst
+const REPORT_MODELS = [
+  'claude-sonnet-4-6-20250514',
+  'claude-sonnet-4-20250514',
+  'claude-haiku-4-5-20251001',
+]
+
+/**
+ * Call Claude with automatic model fallback.
+ * Tries each model in order until one succeeds.
+ */
+async function createWithFallback(
+  client: Anthropic,
+  params: Omit<Anthropic.MessageCreateParamsNonStreaming, 'model'>
+): Promise<Anthropic.Message> {
+  let lastError: Error | null = null
+  for (const model of REPORT_MODELS) {
+    try {
+      const response = await client.messages.create({ ...params, model })
+      console.log(`[Research] Report generated with model: ${model}`)
+      return response
+    } catch (err) {
+      const status = (err as Record<string, unknown>).status
+      if (status === 404) {
+        console.log(`[Research] Model ${model} not available (404), trying next...`)
+        lastError = err as Error
+        continue
+      }
+      throw err // Non-404 errors are real errors
+    }
+  }
+  throw lastError || new Error('No models available for report generation')
+}
+
 interface AdSummary {
   metaAdId: string
   pageName: string | null
@@ -169,8 +203,7 @@ REGLAS:
 - El informe debe tener entre 1500-3000 palabras
 - Incluye emojis para los headers de sección`
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+  const response = await createWithFallback(client, {
     max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -256,8 +289,7 @@ REGLAS:
 - Sé específico y basado en los datos
 - Incluye emojis en headers`
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+  const response = await createWithFallback(client, {
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })
