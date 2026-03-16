@@ -170,7 +170,7 @@ REGLAS:
 - Incluye emojis para los headers de sección`
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5-20250514',
+    model: 'claude-sonnet-4-20250514',
     max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -257,7 +257,7 @@ REGLAS:
 - Incluye emojis en headers`
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5-20250514',
+    model: 'claude-sonnet-4-20250514',
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })
