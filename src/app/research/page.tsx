@@ -56,8 +56,13 @@ export default function ResearchPage() {
       .then((data) => {
         if (Array.isArray(data)) {
           setRuns(data)
-          const latest = data.find((r: RunSummary) => r.status === 'COMPLETE')
-          if (latest) setSelectedRunId(latest.id)
+          // Prefer COMPLETE run, fallback to most recent of any status
+          const complete = data.find((r: RunSummary) => r.status === 'COMPLETE')
+          if (complete) {
+            setSelectedRunId(complete.id)
+          } else if (data.length > 0) {
+            setSelectedRunId(data[0].id)
+          }
         }
       })
       .catch((err) => console.error('[Research] Error loading runs:', err))
@@ -76,6 +81,32 @@ export default function ResearchPage() {
       .catch(() => {})
     return () => { cancelled = true }
   }, [selectedRunId])
+
+  // Auto-refresh when a run is RUNNING
+  useEffect(() => {
+    const hasRunning = runs.some((r) => r.status === 'RUNNING')
+    if (!hasRunning) return
+    const interval = setInterval(() => {
+      fetch('/api/research')
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (!Array.isArray(data)) return
+          setRuns(data)
+          // If the running run completed, reload reports
+          const wasRunning = runs.find((r) => r.status === 'RUNNING')
+          const nowComplete = data.find((r: RunSummary) => r.id === wasRunning?.id && r.status === 'COMPLETE')
+          if (nowComplete) {
+            setSelectedRunId(nowComplete.id)
+            fetch(`/api/research/${nowComplete.id}`)
+              .then((r) => r.json())
+              .then((d) => { if (d.reports) setReports(d.reports) })
+              .catch(() => {})
+          }
+        })
+        .catch(() => {})
+    }, 15000) // Poll every 15 seconds
+    return () => clearInterval(interval)
+  }, [runs])
 
   // Load ads
   const loadAds = useCallback(() => {

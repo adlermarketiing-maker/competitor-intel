@@ -77,11 +77,13 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
   let runId: string | null = null
 
   try {
-    // ── Resume existing run or create new one ──
+    // ── Resume existing run — delegate to standalone analysis ──
     if (isResume) {
       runId = job.data.resumeRunId!
-      console.log(`[Research] Resuming run ${runId} — skipping search, starting analysis...`)
-      await updateResearchRun(runId, { status: 'RUNNING', startedAt: now })
+      console.log(`[Research] Resuming run ${runId} via BullMQ — delegating to standalone analysis...`)
+      const { runResearchAnalysis } = await import('@/lib/analysis/runResearchAnalysis')
+      await runResearchAnalysis(runId)
+      return // standalone function handles everything
     } else {
       console.log(`[Research] Starting weekly research for ${weekLabel}...`)
       const run = await createResearchRun(weekLabel)
@@ -470,6 +472,30 @@ export async function setupResearchSchedule() {
   const existing = await queue.getRepeatableJobs()
   for (const job of existing) {
     await queue.removeRepeatableByKey(job.key)
+  }
+
+  // Clean stale jobs from previous deploys
+  try {
+    const active = await queue.getActive()
+    if (active.length > 0) {
+      console.log(`[Research] Cleaning ${active.length} stale active jobs from previous deploy`)
+      for (const job of active) {
+        try {
+          await job.moveToFailed(new Error('Cleaned on startup — stale from previous deploy'), '0')
+        } catch { /* ignore — job might have already moved */ }
+      }
+    }
+    const stalled = await queue.getJobs(['waiting'])
+    if (stalled.length > 0) {
+      console.log(`[Research] Cleaning ${stalled.length} stale waiting jobs`)
+      for (const job of stalled) {
+        try {
+          await job.remove()
+        } catch { /* ignore */ }
+      }
+    }
+  } catch (err) {
+    console.error('[Research] Error cleaning stale jobs:', err instanceof Error ? err.message : err)
   }
 
   await queue.add(
