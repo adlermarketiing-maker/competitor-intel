@@ -10,6 +10,7 @@ function getClient(): Anthropic {
 
 // Models to try in order — best to worst
 const REPORT_MODELS = [
+  'claude-opus-4-20250514',
   'claude-sonnet-4-6-20250514',
   'claude-sonnet-4-20250514',
   'claude-haiku-4-5-20251001',
@@ -152,56 +153,83 @@ Score medio: ${ads.length > 0 ? (ads.reduce((sum, a) => sum + (a.aiScore ?? 0), 
     global: 'Todos los Mercados',
   }
 
-  const prompt = `Eres un estratega de publicidad digital de élite. Tu cliente es una agencia de marketing que gestiona campañas para infoproductores, mentores y coaches. Acaban de completar su investigación semanal de anuncios en el ${marketNames[market] || market} (semana ${weekLabel}).
+  const prompt = `Eres el director de estrategia de una agencia de publicidad digital de alto nivel. Tu equipo de research acaba de completar el análisis semanal de anuncios activos en el ${marketNames[market] || market} (semana ${weekLabel}). Vas a redactar el informe semanal que envías a tus clientes — infoproductores, mentores, coaches y creadores de cursos online.
 
-DATOS ESTADÍSTICOS:
+Este informe es el PRODUCTO PRINCIPAL que tus clientes pagan. Debe ser TAN BUENO que justifique una suscripción mensual. No es un resumen genérico: es inteligencia competitiva de alto valor.
+
+DATOS ESTADÍSTICOS DEL MERCADO:
 ${statsText}
 
-ANUNCIOS ANALIZADOS (ordenados por innovación):
+MUESTRA DE ANUNCIOS ANALIZADOS (top ${topAds.length} por innovación de ${ads.length} totales):
 ${adsText}
 
-Genera un INFORME PROFESIONAL en HTML (sin etiquetas <html>, <head>, <body> — solo el contenido interior). El informe debe ser ELABORADO, PROFUNDO y ACCIONABLE. No es un resumen superficial: es un análisis estratégico que un director de marketing usará para tomar decisiones.
+═══════════════════════════════════════════════════
+GENERA EL INFORME EN HTML (sin tags html/head/body — solo contenido interior).
 
-ESTRUCTURA DEL INFORME:
+SECCIONES OBLIGATORIAS:
 
-<h2>📊 Resumen Ejecutivo</h2>
-2-3 párrafos densos analizando el estado actual del mercado esta semana. Tendencias dominantes, cambios observados, oportunidades detectadas.
+<h2>📊 Resumen Ejecutivo — ${marketNames[market] || market}</h2>
+Escribe 3-4 párrafos DENSOS (no superficiales) analizando:
+- El ESTADO REAL del mercado esta semana: ¿Qué está pasando? ¿Hay saturación de algún formato? ¿Se ve innovación?
+- DATOS CONCRETOS: "El ${Math.round(stats.formats[0]?.pct || 0)}% de los anuncios usan ${stats.formats[0]?.name || '?'}, lo que sugiere..."
+- OPORTUNIDADES no explotadas que detectas en los datos
+- RIESGOS: ¿Qué deberían evitar tus clientes?
 
-<h2>🎬 Formatos Dominantes</h2>
-Ranking de los formatos más usados con porcentaje. Para cada formato TOP 3:
-- Por qué funciona en este mercado
-- Ejemplo concreto de un ad que lo usa bien (citar el copy)
-- Cómo adaptarlo para otros nichos
+<h2>🎬 Análisis de Formatos Creativos</h2>
+Para CADA formato del TOP 5 (con porcentaje exacto del total):
+- <h3>1. [Formato] — X%</h3>
+- ¿POR QUÉ domina? Análisis psicológico de por qué funciona con esta audiencia
+- EJEMPLO REAL: cita el copy exacto de un anuncio que usa este formato magistralmente (usa <blockquote>)
+- RECOMENDACIÓN PRÁCTICA: cómo debería usarlo un infoproductor de [nicho específico]
+- VARIACIÓN RECOMENDADA: propón una variante creativa que nadie está usando
 
-<h2>🎯 Ángulos de Marketing</h2>
-Análisis de los ángulos emocionales predominantes. ¿Cuáles se están saturando? ¿Cuáles son frescos?
-Incluye ejemplos textuales del copy.
+<h2>🎯 Mapa de Ángulos Emocionales</h2>
+Análisis profundo de los ángulos de marketing detectados:
+- ¿Cuáles están SATURADOS y ya no funcionan? (con datos)
+- ¿Cuáles son FRESCOS y tienen poco uso pero alta efectividad?
+- Para cada ángulo top, cita el copy exacto que mejor lo ejecuta
+- MATRIZ de oportunidad: cruza ángulos poco usados con formatos dominantes = combinaciones ganadoras
 
-<h2>🪝 Hooks Más Efectivos</h2>
-Los ganchos que mejor funcionan esta semana. Cita los hooks exactos de los mejores ads.
-Explica la psicología detrás de cada uno.
+<h2>🪝 Disección de Hooks</h2>
+Los 5 hooks más efectivos encontrados esta semana:
+- Para cada hook, cita el TEXTO EXACTO del anuncio
+- Explica la PSICOLOGÍA detrás (qué bias cognitivo activa, por qué funciona)
+- Propón 2-3 VARIACIONES del hook adaptadas a nichos diferentes (fitness, finanzas, desarrollo personal)
+- Clasifica cada hook por nivel de sofisticación de la audiencia
 
-<h2>⭐ Ads Destacados</h2>
-Los 5-10 ads con mayor potencial de innovación. Para cada uno:
-- Quién lo publica (pageName)
-- Qué hace especial a este ad
-- El copy o hook exacto
-- Por qué es innovador
-- Cómo adaptarlo para clientes de la agencia
-- Link a Meta Ad Library si disponible
+<h2>⭐ Top 10 Anuncios de la Semana</h2>
+Los anuncios más innovadores/efectivos. Para CADA uno:
+- <h3>🏆 #N — "[pageName]"</h3>
+- <strong>Hook:</strong> "[cita el hook exacto]"
+- <strong>Copy preview:</strong> [primeras 200 palabras del copy en blockquote]
+- <strong>Formato:</strong> [tipo] | <strong>Ángulo:</strong> [tipo] | <strong>Días activo:</strong> [N]
+- <strong>¿Por qué destaca?</strong> [análisis de 2-3 frases sobre qué lo hace especial]
+- <strong>Cómo replicar:</strong> [instrucciones paso a paso para crear una versión propia]
+- <strong>Link:</strong> <a href="[adSnapshotUrl]" target="_blank">Ver en Meta Ad Library</a>
 
-<h2>💡 Ideas Accionables</h2>
-3-5 ideas CONCRETAS y ESPECÍFICAS que la agencia puede implementar esta semana con sus clientes.
-No genéricas tipo "usa vídeo". Específicas tipo "Testea un hook de pregunta retórica en formato carrusel educativo de 5 slides para clientes de coaching, usando la estructura: pregunta impactante → 3 errores comunes → solución → CTA con urgencia".
+<h2>🧪 Laboratorio de Ideas — 5 Tests para Esta Semana</h2>
+5 ideas ULTRA ESPECÍFICAS que tus clientes pueden testear ESTA SEMANA:
+Para cada idea:
+- <h3>Test #N: "[nombre descriptivo del test]"</h3>
+- <strong>Basado en:</strong> [qué dato/anuncio inspiró esta idea]
+- <strong>Formato:</strong> [exacto — "Carrusel de 5 slides" no "carrusel"]
+- <strong>Hook propuesto:</strong> "[escribe el hook completo, no una descripción]"
+- <strong>Estructura del copy:</strong> [paso a paso — "Slide 1: pregunta retórica sobre X. Slide 2: estadística impactante. Slide 3:..."]
+- <strong>CTA:</strong> "[escribe el CTA exacto]"
+- <strong>Para qué cliente:</strong> [tipo específico de infoproductor]
+- <strong>KPI objetivo:</strong> [qué medir — CTR, hook rate, etc.]
 
-REGLAS:
-- Escribe en español
-- Usa HTML semántico: <h2>, <h3>, <p>, <strong>, <em>, <ul>, <li>, <blockquote>
-- Los copies citados van en <blockquote>
-- Los links a Meta Ad Library usan: <a href="URL" target="_blank">Ver en Meta</a>
-- Sé específico y cita datos del análisis. No inventes.
-- El informe debe tener entre 1500-3000 palabras
-- Incluye emojis para los headers de sección`
+═══════════════════════════════════════════════════
+REGLAS CRÍTICAS:
+- Escribe en español (España, no Latinoamérica)
+- HTML semántico: <h2>, <h3>, <p>, <strong>, <em>, <ul>, <li>, <blockquote>, <a>
+- Los copies y hooks citados van SIEMPRE en <blockquote>
+- Los links a Meta usan: <a href="URL" target="_blank">Ver en Meta Ad Library</a>
+- CITA DATOS REALES del análisis. No inventes porcentajes ni copies.
+- El informe debe tener entre 3000-5000 palabras. Esto es un informe PREMIUM, no un resumen.
+- Cada sección debe tener PROFUNDIDAD — análisis, no descripción.
+- NO uses frases vacías tipo "es importante", "cabe destacar", "resulta interesante". Sé DIRECTO.
+- Cuando propongas ideas, escribe el COPY EXACTO que usarías, no una descripción de lo que escribirías.`
 
   const response = await createWithFallback(client, {
     max_tokens: 8192,
