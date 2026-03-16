@@ -72,6 +72,25 @@ export async function runResearchAnalysis(runId: string): Promise<void> {
       return
     }
 
+    // Quick API key validation
+    try {
+      const Anthropic = (await import('@anthropic-ai/sdk')).default
+      const testClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      const test = await testClient.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Say OK' }],
+      })
+      console.log(`[Research] API key validated — Haiku responded: ${test.content[0].type === 'text' ? test.content[0].text : 'ok'}`)
+    } catch (err) {
+      const errMsg = err instanceof Error
+        ? `${err.constructor.name}: ${err.message} ${JSON.stringify({ status: (err as unknown as Record<string, unknown>).status })}`
+        : String(err)
+      console.error(`[Research] API key validation FAILED: ${errMsg}`)
+      await updateResearchRun(runId, { status: 'FAILED', errorMessage: `API key invalid: ${errMsg}`, completedAt: new Date() })
+      return
+    }
+
     // Load config
     const config = await getResearchConfig()
     const activeMarkets = config.markets.filter((m) => m.isActive)
@@ -187,7 +206,10 @@ export async function runResearchAnalysis(runId: string): Promise<void> {
           classified++
         }
       } catch (err) {
-        console.error(`[Research] Classification API error:`, err instanceof Error ? err.message : err)
+        const errMsg = err instanceof Error
+          ? `${err.constructor.name}: ${err.message || '(empty)'} ${JSON.stringify({ status: (err as any).status, error: (err as any).error })}`
+          : String(err)
+        console.error(`[Research] Classification API error: ${errMsg}`)
         classifyErrors++
         // Mark batch as 'other' to prevent infinite loop
         await db.researchAd.updateMany({
@@ -242,7 +264,11 @@ export async function runResearchAnalysis(runId: string): Promise<void> {
 
         await new Promise((r) => setTimeout(r, 300))
       } catch (err) {
-        console.error(`[Research] Analysis error for ${ad.metaAdId}:`, err instanceof Error ? err.message : err)
+        // Log full error details — Anthropic SDK errors have status/error/message
+        const errMsg = err instanceof Error
+          ? `${err.constructor.name}: ${err.message || '(empty message)'} ${JSON.stringify({ status: (err as any).status, error: (err as any).error })}`
+          : String(err)
+        console.error(`[Research] Analysis error for ${ad.metaAdId}: ${errMsg}`)
         analyzeErrors++
         // Mark as analyzed anyway to prevent re-processing
         try {
