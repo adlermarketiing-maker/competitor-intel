@@ -256,12 +256,14 @@ async function processResearchJob(job: Job<ResearchJobData>): Promise<void> {
           imageCount: ad.imageUrls.length,
         })
 
-        // Innovation score: ask for it in a separate lightweight call
         const innovationScore = computeInnovationScore(tags, ad.daysActive)
+
+        // Strip offer* fields — they exist in AdTagsResult but NOT in ResearchAd schema
+        const { offerPrice: _, offerDiscount: _d, offerBonuses: _b, offerGuarantee: _g, offerScarcity: _s, ...adTags } = tags
 
         await updateResearchAdAnalysis(ad.id, {
           aiAnalyzed: true,
-          ...tags,
+          ...adTags,
           innovationScore,
         })
         analyzed++
